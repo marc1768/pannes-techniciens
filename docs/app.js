@@ -161,7 +161,7 @@
           '</div>' +
           '<div style="text-align:center;font-size:.88rem;color:var(--doux);padding:0 12px;line-height:1.45">Mot de passe perdu ? Préviens Marc, il le réinitialise.</div>' +
         '</form>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.3</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.4</div>' +
       '</div>';
     $('voir').addEventListener('click', () => {
       const c = $('mdp'); c.type = c.type === 'password' ? 'text' : 'password';
@@ -236,8 +236,8 @@
         '<div class="carte-haut">' +
           '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' + (ICONES[i.type] || ICONES['PANNE']) + '</span>' +
           '<span class="carte-titres"><span class="nom">' + titre + '</span><span class="sous">' + sous + '</span></span>' +
-          etiq +
         '</div>' +
+        '<div class="etiqs">' + etiq + '</div>' +
         (texte ? '<div class="nature' + (estRappel ? ' rappel' : '') + '">' + texte + '</div>' : '') +
         (i.livraisonLe ? '<div class="info-liv">' + ech(i.livraisonLe) + '</div>' : '') +
       '</div></button>';

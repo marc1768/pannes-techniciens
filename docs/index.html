@@ -85,7 +85,7 @@
     overflow: hidden; box-shadow: var(--ombre); width: 100%; padding: 0; text-align: left; display: block;
   }
   .liseret { height: 3px; }
-  .carte-corps { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .carte-corps { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
   .carte-haut { display: flex; align-items: center; gap: 12px; }
   .tuile {
     width: 44px; height: 44px; border-radius: 14px; border: 1.5px solid; flex: none;
@@ -93,7 +93,8 @@
   }
   .tuile svg { width: 24px; height: 24px; }
   .carte-titres { flex: 1; min-width: 0; }
-  .carte-titres .nom { font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .carte-titres .nom { font-size: 1rem; font-weight: 700; line-height: 1.25; }
+  .etiqs { display: flex; flex-wrap: wrap; gap: 6px; }
   .carte-titres .sous { font-size: .82rem; color: var(--doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .etiq { padding: 6px 10px; border-radius: 10px; font-size: .75rem; font-weight: 700; white-space: nowrap; flex: none; }
   .etiq-attente { background: var(--attente-c); border: 1px solid var(--attente-b); color: var(--attente-f); }
@@ -213,6 +214,6 @@
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js?v=4" defer></script>
+<script src="app.js?v=5" defer></script>
 </body>
 </html>
