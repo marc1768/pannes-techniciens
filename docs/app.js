@@ -161,7 +161,7 @@
           '</div>' +
           '<div style="text-align:center;font-size:.88rem;color:var(--doux);padding:0 12px;line-height:1.45">Mot de passe perdu ? Préviens Marc, il le réinitialise.</div>' +
         '</form>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.1</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.2</div>' +
       '</div>';
     $('voir').addEventListener('click', () => {
       const c = $('mdp'); c.type = c.type === 'password' ? 'text' : 'password';
@@ -266,6 +266,8 @@
         '<div class="titre-ligne">' +
           '<div><h1>Interventions</h1><div class="sous">' + ech(jour.charAt(0).toUpperCase() + jour.slice(1)) + ' · ' +
             etat.interventions.length + ' à traiter</div></div>' +
+          '<button class="btn-actu' + (etat.chargement ? ' occupe' : '') + '" id="b-actu" aria-label="Actualiser">' +
+            SVG('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>') + '</button>' +
           '<button class="btn-compte" id="b-compte"><span class="pastille">' + ech(initiale(etat.moi.nom)) + '</span>' + ech(etat.moi.nom) + '</button>' +
         '</div>' +
         (compteurs ? '<div class="compteurs" id="cpt">' + compteurs + '</div>' : '') +
@@ -284,8 +286,8 @@
       '</main>' +
       '<footer>' +
         '<button aria-current="page">' + SVG('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>') + 'Liste</button>' +
-        '<button class="btn-plus' + (etat.chargement ? ' occupe' : '') + '" id="b-actu" aria-label="Actualiser la liste">' +
-          SVG('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>') + '</button>' +
+        '<button class="btn-plus" id="b-nouvelle" aria-label="Nouvelle intervention">' +
+          SVG('<path d="M12 5v14M5 12h14"/>') + '</button>' +
         '<button id="b-compte2">' + SVG('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>') + 'Compte</button>' +
       '</footer>';
 
@@ -304,6 +306,7 @@
       if (i) vueDetail(i);
     });
     $('b-actu').addEventListener('click', () => chargerListe(true));
+    $('b-nouvelle').addEventListener('click', vueNouvelle);
     $('b-compte').addEventListener('click', vueCompte);
     $('b-compte2').addEventListener('click', vueCompte);
   }
@@ -321,6 +324,20 @@
       etat.erreur = ''; etat.interventions = r.interventions; etat.maintenant = r.maintenant;
     }
     if (document.querySelector('header')) vueListe();
+  }
+
+  /* ---------- Écran : nouvelle intervention (en construction) ---------- */
+  function vueNouvelle() {
+    app().innerHTML =
+      '<div class="page">' +
+        '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
+          '<h2>Nouvelle intervention</h2></div>' +
+        '<div class="contenu">' +
+          '<div class="msg msg-info">Cet écran est en cours de construction. En attendant, encode la panne dans AppSheet : elle apparaîtra ici tout de suite.</div>' +
+          '<button class="btn btn-second" id="b-ret2">Retour à la liste</button>' +
+        '</div></div>';
+    $('b-ret').addEventListener('click', () => { vueListe(); chargerListe(); });
+    $('b-ret2').addEventListener('click', () => { vueListe(); chargerListe(); });
   }
 
   /* ---------- Écran : détail d'une intervention ---------- */

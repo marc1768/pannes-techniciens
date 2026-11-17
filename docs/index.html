@@ -50,6 +50,10 @@
     display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px 0 6px; border-radius: 22px;
     border: 1px solid var(--bord); background: var(--carte); font-size: .88rem; font-weight: 700; flex: none;
   }
+  .btn-actu { width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--bord); background: var(--carte);
+    color: var(--doux); display: flex; align-items: center; justify-content: center; flex: none; }
+  .btn-actu svg { width: 21px; height: 21px; }
+  .btn-actu.occupe svg { animation: t .8s linear infinite; }
   .pastille {
     width: 32px; height: 32px; border-radius: 16px; background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center; font-size: .82rem; font-weight: 800; flex: none;
@@ -75,7 +79,7 @@
   .filtres button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
 
   /* ---------- Liste ---------- */
-  main { flex: 1; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+  main { flex: 1; padding: 0 16px calc(104px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
   .carte {
     background: var(--carte); border: 1px solid var(--bord); border-radius: var(--rayon);
     overflow: hidden; box-shadow: var(--ombre); width: 100%; padding: 0; text-align: left; display: block;
@@ -104,7 +108,7 @@
     height: 76px; flex: none; background: var(--carte); border-top: 1px solid var(--bord);
     display: flex; align-items: center; justify-content: space-around; padding: 0 8px;
     padding-bottom: env(safe-area-inset-bottom); height: calc(76px + env(safe-area-inset-bottom));
-    position: sticky; bottom: 0; z-index: 10;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   }
   footer button { width: 80px; height: 56px; border: 0; background: transparent; color: var(--doux);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: .75rem; font-weight: 600; }
@@ -197,6 +201,6 @@
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js?v=2" defer></script>
+<script src="app.js?v=3" defer></script>
 </body>
 </html>
