@@ -1,0 +1,10 @@
+{
+  "name": "pannes-techniciens-relais",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Relais Cloudflare du système technicien (connexion par nom, lecture et prise des interventions dans Google Sheet)",
+  "scripts": {
+    "test": "node --import ./test/register.mjs --test test/*.test.mjs"
+  }
+}
