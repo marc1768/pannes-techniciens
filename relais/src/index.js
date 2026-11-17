@@ -373,6 +373,8 @@ export class Relais extends DurableObject {
     return {
       ligne, horodateur: serie, horodateurTexte: isoDepuisSerie(serie),
       cafe: txt(l[pos['Café/Salle:']]), ville: txt(l[pos['Ville']]), appareil, type: typeDe(appareil), nature,
+      adresse: pos['Adresse'] === undefined ? '' : txt(l[pos['Adresse']]),
+      codePostal: pos['Code Postal'] === undefined ? '' : txt(l[pos['Code Postal']]),
       statut, techniciens: listeValeurs(l[pos['Technicien']]), reservePar,
       debut: isoDepuisSerie(l[pos['Début']]), priorite: priorite(appareil),
       reserveLe: reserveLe(statut, reservePar),
