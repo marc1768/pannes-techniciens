@@ -144,6 +144,18 @@
   .deux { display: flex; gap: 10px; }
   .deux .btn { flex: 1; }
 
+  /* ---------- Carte et itinéraire ---------- */
+  .carte-plan { border: 1px solid var(--bord); border-radius: var(--rayon); overflow: hidden; background: var(--carte); }
+  .carte-plan iframe { display: block; width: 100%; height: 170px; border: 0; }
+  .carte-adresse { padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--bord); }
+  .carte-adresse svg { width: 20px; height: 20px; flex: none; color: var(--doux); }
+  .itineraire { display: flex; gap: 8px; }
+  .itineraire a { flex: 1; height: 54px; border-radius: 14px; border: 1.5px solid var(--bord); background: var(--carte);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    text-decoration: none; font-size: .78rem; font-weight: 700; }
+  .itineraire a svg { width: 20px; height: 20px; }
+  .it-plan { color: #1d4ed8; } .it-maps { color: #15803d; } .it-waze { color: #0e7490; }
+
   /* ---------- Connexion ---------- */
   .connexion { flex: 1; display: flex; flex-direction: column; padding: 0 16px; }
   .logo-rond {
@@ -201,6 +213,6 @@
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js?v=3" defer></script>
+<script src="app.js?v=4" defer></script>
 </body>
 </html>

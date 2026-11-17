@@ -161,7 +161,7 @@
           '</div>' +
           '<div style="text-align:center;font-size:.88rem;color:var(--doux);padding:0 12px;line-height:1.45">Mot de passe perdu ? Préviens Marc, il le réinitialise.</div>' +
         '</form>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.2</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.3</div>' +
       '</div>';
     $('voir').addEventListener('click', () => {
       const c = $('mdp'); c.type = c.type === 'password' ? 'text' : 'password';
@@ -345,7 +345,7 @@
     const c = COULEURS[i.type] || 'panne';
     const estRappel = i.type === 'RAPPEL';
     const aMoi = i.techniciens.includes(etat.moi.nom);
-    const adresse = [i.cafe, i.ville].filter(Boolean).join(', ');
+    const adresse = [i.cafe, i.adresse, [i.codePostal, i.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const maps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(adresse);
 
     let etiqs = '';
@@ -397,12 +397,21 @@
           (i.consigne ? '<div class="msg msg-info">' + ech(i.consigne) + '</div>' : '') +
           (i.livraisonLe ? '<div class="bloc"><div class="lib">Livraison</div><div class="val">' + ech(i.livraisonLe) + '</div></div>' : '') +
           (estRappel ? '' :
-            '<a class="bloc" href="' + ech(maps) + '" target="_blank" rel="noopener" style="flex-direction:row;align-items:center;gap:14px;text-decoration:none;color:inherit">' +
-              SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>').replace('<svg', '<svg style="width:22px;height:22px;flex:none;color:var(--doux)"') +
-              '<span style="flex:1"><span style="display:block;font-size:.75rem;color:var(--doux)">Adresse</span>' +
-              '<span style="display:block;font-size:.95rem;font-weight:600">' + ech(adresse) + '</span></span>' +
-              '<span style="height:36px;padding:0 12px;border-radius:18px;background:var(--accent-clair);color:var(--accent-fonce);font-size:.8rem;font-weight:700;display:flex;align-items:center">Itinéraire</span>' +
-            '</a>') +
+            '<div class="carte-plan">' +
+              '<iframe title="Carte" loading="lazy" referrerpolicy="no-referrer" src="https://maps.google.com/maps?q=' + encodeURIComponent(adresse) + '&z=15&output=embed"></iframe>' +
+              '<div class="carte-adresse">' +
+                SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>') +
+                '<span style="flex:1"><span style="display:block;font-size:.75rem;color:var(--doux)">Adresse</span>' +
+                '<span style="display:block;font-size:.95rem;font-weight:600">' + ech(adresse) + '</span></span>' +
+              '</div></div>' +
+            '<div class="itineraire">' +
+              '<a class="it-plan" href="https://maps.apple.com/?daddr=' + encodeURIComponent(adresse) + '&dirflg=d" target="_blank" rel="noopener">' +
+                SVG('<path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/>') + 'Plan</a>' +
+              '<a class="it-maps" href="https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(adresse) + '&travelmode=driving" target="_blank" rel="noopener">' +
+                SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>') + 'Maps</a>' +
+              '<a class="it-waze" href="https://www.waze.com/ul?q=' + encodeURIComponent(adresse) + '&navigate=yes" target="_blank" rel="noopener">' +
+                SVG('<circle cx="12" cy="11" r="8"/><path d="M9 10h.01M15 10h.01M9 14.5a4 4 0 0 0 6 0"/>') + 'Waze</a>' +
+            '</div>') +
           (i.debut ? '<div class="bloc"><div class="lib">Début</div><div class="val">' + ech(i.debut.replace('T', ' à ')) + '</div></div>' : '') +
         '</div>' +
         (boutons ? '<div class="actions" id="act">' + boutons + '</div>' : '') +
