@@ -164,6 +164,14 @@
   .msg-info { background: var(--attente-c); border: 1px solid var(--attente-b); color: var(--attente-f); }
   .vide { text-align: center; color: var(--doux); padding: 40px 20px; line-height: 1.5; }
 
+  /* ---------- Retour visuel au toucher ---------- */
+  button, .carte, .ligne-tech, a.bloc { transition: transform .08s ease, background-color .12s ease, filter .08s ease; }
+  button:active, .carte:active, .ligne-tech:active, a.bloc:active { transform: scale(.97); filter: brightness(.94); }
+  footer button:active { background: var(--accent-clair); border-radius: 14px; color: var(--accent-fonce); }
+  .btn-plus:active { transform: scale(.92); box-shadow: 0 2px 8px rgba(181,84,42,.45); }
+  .btn-plus.occupe svg { animation: t .8s linear infinite; }
+  .compteurs button:active, .filtres button:active { transform: scale(.94); }
+
   /* ---------- Chargement ---------- */
   .chargement { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 30px; color: var(--doux); }
   .tourne { width: 22px; height: 22px; border: 3px solid var(--bord); border-top-color: var(--accent); border-radius: 50%; animation: t 1s linear infinite; }
@@ -189,6 +197,6 @@
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js" defer></script>
+<script src="app.js?v=2" defer></script>
 </body>
 </html>

@@ -284,7 +284,7 @@
       '</main>' +
       '<footer>' +
         '<button aria-current="page">' + SVG('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>') + 'Liste</button>' +
-        '<button class="btn-plus" id="b-actu" aria-label="Actualiser la liste">' +
+        '<button class="btn-plus' + (etat.chargement ? ' occupe' : '') + '" id="b-actu" aria-label="Actualiser la liste">' +
           SVG('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>') + '</button>' +
         '<button id="b-compte2">' + SVG('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>') + 'Compte</button>' +
       '</footer>';
@@ -624,6 +624,7 @@
   });
 
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js')
+      .then((reg) => { reg.update(); setInterval(() => reg.update(), 300000); }).catch(() => {}));
   }
 })();
