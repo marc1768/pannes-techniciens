@@ -161,7 +161,7 @@
           '</div>' +
           '<div style="text-align:center;font-size:.88rem;color:var(--doux);padding:0 12px;line-height:1.45">Mot de passe perdu ? Préviens Marc, il le réinitialise.</div>' +
         '</form>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.0</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.1</div>' +
       '</div>';
     $('voir').addEventListener('click', () => {
       const c = $('mdp'); c.type = c.type === 'password' ? 'text' : 'password';
@@ -246,12 +246,12 @@
   function vueListe() {
     const parType = {};
     etat.interventions.forEach((i) => { parType[i.type] = (parType[i.type] || 0) + 1; });
-    const types = ORDRE_TYPES.filter((t) => parType[t]);
+    const types = ORDRE_TYPES;                       // toujours tous les types, même à 0
     const compteurs = types.map((t) => {
       const c = COULEURS[t];
-      return '<button data-type="' + t + '" aria-pressed="' + (etat.filtreType === t) + '" aria-label="' + parType[t] + ' ' + ech(LIBELLES[t]) + '" ' +
+      return '<button data-type="' + t + '" aria-pressed="' + (etat.filtreType === t) + '" aria-label="' + (parType[t] || 0) + ' ' + ech(LIBELLES[t]) + '" ' +
         'style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
-        (ICONES[t] || '') + '<b>' + parType[t] + '</b></button>';
+        (ICONES[t] || '') + '<b>' + (parType[t] || 0) + '</b></button>';
     }).join('');
 
     let liste = etat.interventions;
@@ -490,7 +490,7 @@
           '<button class="btn btn-rouge" id="b-out" style="margin-top:8px">' +
             SVG('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>') + 'Se déconnecter</button>' +
         '</div>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:14px 0 28px">Version 1.0</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:14px 0 28px">Version 1.1</div>' +
       '</div>';
     $('b-ret').addEventListener('click', () => { vueListe(); chargerListe(); });
     $('b-chg').addEventListener('click', () => vueChangerMdp());
