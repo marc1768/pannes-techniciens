@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.9';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.10';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -633,6 +633,18 @@
           (i.encaisser ? '<div class="msg msg-info">' + ech(i.encaisser) + '</div>' : '') +
           (i.consigne ? '<div class="msg msg-info">' + ech(i.consigne) + '</div>' : '') +
           (i.livraisonLe ? '<div class="bloc"><div class="lib">Livraison</div><div class="val">' + ech(i.livraisonLe) + '</div></div>' : '') +
+          // Produits à charger (livraison Horeca venue d'une vente au comptoir), fournis par le relais.
+          (i.produits && i.produits.length ?
+            '<div class="bloc"><div class="lib">Produits à charger' + (i.ticket ? ' · ticket ' + ech(i.ticket) : '') + '</div>' +
+              '<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">' +
+              i.produits.map((p) =>
+                '<div style="display:flex;align-items:baseline;gap:10px;padding:6px 0;border-bottom:1px solid var(--bord)">' +
+                  '<span style="min-width:2.6em;text-align:right;font-weight:800;font-size:1.05rem">' + ech(p.quantite || '?') + ' ×</span>' +
+                  '<span style="flex:1;font-size:.95rem">' + ech(p.produit) + '</span></div>').join('') +
+              '</div></div>'
+            : (i.type === 'LIVRAISON HORECA' && i.ticket ?
+              '<div class="bloc"><div class="lib">Produits à charger · ticket ' + ech(i.ticket) + '</div>' +
+                '<div class="val" style="font-size:.88rem;color:var(--doux)">Détail non disponible : voir le QR code du ticket Odoo.</div></div>' : '')) +
           (estRappel ? '' :
             '<div class="carte-plan">' +
               '<iframe title="Carte" loading="lazy" referrerpolicy="no-referrer" src="https://maps.google.com/maps?q=' + encodeURIComponent(adresse) + '&z=15&output=embed"></iframe>' +
