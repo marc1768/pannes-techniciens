@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.7';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.8';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -330,15 +330,15 @@
   /* ---------- Écrans : nouvelle intervention (café, appareil, nature, prendre ou déposer) ---------- */
 
   // Types proposés à la création, dans l'ordre d'AppSheet. Les appareils de jeu sont listés ensuite.
-  const TYPES_CREATION = ['PANNE', 'MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'AUTRE', 'RAPPEL'];
+  const TYPES_CREATION = ['PANNE', 'MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'AUTRE'];
   const APPAREILS_JEU = ['MONTANA LUXE II', 'DAYTONA', 'NEVADA', 'ZEUS', 'ARIZONA', 'MK3', 'MK4', 'ACTION PACK',
     'TOP MACHINE', 'GREYHOUND', 'TEXAS', 'KICKER', 'BILLARD', 'FLECHE', 'INDETERMINE'];
   let brouillon = null;
   let listeCafes = null;
 
   function vueNouvelle() {
-    brouillon = { licence: '', cafe: '', ville: '', type: '', machines: [], appareil: '', nature: '' };
-    etapeCafe();
+    brouillon = { licence: '', cafe: '', ville: '', type: '', machines: [], appareil: '', nature: '', filtres: null };
+    etapeType();
   }
 
   // Barre du haut commune aux écrans de création, avec le numéro d'étape.
@@ -348,18 +348,49 @@
       '<div style="font-size:.8rem;color:var(--doux)">Étape ' + etape + ' sur 4</div></div></div>';
   }
 
-  /* --- Étape 1 : le café --- */
-  async function etapeCafe(msg) {
+  /* --- Étape 1 : le type d'intervention --- */
+  function etapeType() {
+    const ligne = (v) => {
+      const c = COULEURS[v] || 'panne';
+      return '<button class="ligne-tech" data-t="' + ech(v) + '">' +
+        '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
+          (ICONES[v] || ICONES['PANNE']) + '</span>' +
+        '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(LIBELLES[v] || v) + '</span>' + CHEVRON + '</button>';
+    };
     app().innerHTML =
-      '<div class="page">' + barreCreation('Quel café ?', 1) +
-        '<div style="padding:4px 16px 8px"><input id="q" type="search" placeholder="Chercher un café ou une ville" ' +
+      '<div class="page">' + barreCreation('Type d’intervention', 1) +
+        '<div class="contenu">' + TYPES_CREATION.map(ligne).join('') + '</div></div>';
+    $('b-ret').addEventListener('click', () => { vueListe(); chargerListe(); });
+    document.querySelector('.contenu').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-t]'); if (!b) return;
+      brouillon.type = b.dataset.t;
+      brouillon.machines = [];
+      // Les livraisons Horeca visent les adresses Z, le reste les cafés C.
+      brouillon.filtres = brouillon.type === 'LIVRAISON HORECA' ? { c: false, z: true } : { c: true, z: false };
+      etapeCafe();
+    });
+  }
+
+  /* --- Étape 2 : l'établissement, filtré par type de licence --- */
+  async function etapeCafe(msg) {
+    const f = brouillon.filtres || (brouillon.filtres = { c: true, z: false });
+    const casePour = (cle, texte) => {
+      const pris = !!f[cle];
+      return '<button class="filtre-lic' + (pris ? ' pris' : '') + '" data-f="' + cle + '">' +
+        '<span class="coche' + (pris ? ' prise' : '') + '">' + (pris ? SVG('<path d="M20 6L9 17l-5-5"/>') : '') + '</span>' +
+        ech(texte) + '</button>';
+    };
+    app().innerHTML =
+      '<div class="page">' + barreCreation('Quel établissement ?', 2) +
+        '<div style="padding:4px 16px 0;display:flex;gap:8px">' + casePour('c', 'Cafés') + casePour('z', 'Horeca') + '</div>' +
+        '<div style="padding:8px 16px"><input id="q" type="search" placeholder="Chercher un nom ou une ville" ' +
           'autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;height:52px;border-radius:14px;' +
           'border:1px solid var(--bord);background:var(--doux2);padding:0 14px;font-size:1.05rem"></div>' +
         '<div class="contenu" id="c" style="padding-top:0">' +
           (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
-          '<div class="chargement"><span class="tourne"></span> Chargement des cafés...</div>' +
+          '<div class="chargement"><span class="tourne"></span> Chargement...</div>' +
         '</div></div>';
-    $('b-ret').addEventListener('click', () => { vueListe(); chargerListe(); });
+    $('b-ret').addEventListener('click', () => etapeType());
 
     if (!listeCafes) {
       const r = await appeler({ action: 'cafes' });
@@ -370,61 +401,41 @@
       }
       listeCafes = r.cafes;
     }
+    // La première lettre de la licence dit le genre : C pour un café, Z pour une adresse Horeca.
+    const genre = (lic) => (txtMaj(lic)[0] === 'Z' ? 'z' : 'c');
     const dessiner = () => {
       const q = ($('q').value || '').trim().toUpperCase();
-      let l = listeCafes;
-      if (q) l = l.filter((c) => (c.nom + ' ' + c.ville + ' ' + c.licence).toUpperCase().indexOf(q) >= 0);
+      let l = listeCafes.filter((x) => f[genre(x.licence)]);
+      if (q) l = l.filter((x) => (x.nom + ' ' + x.ville + ' ' + x.licence).toUpperCase().indexOf(q) >= 0);
       const nb = l.length;
       l = l.slice(0, 40);
       $('c').innerHTML =
         '<div style="font-size:.82rem;color:var(--doux);padding:0 4px 2px">' +
-          (q ? nb + ' résultat' + (nb > 1 ? 's' : '') : listeCafes.length + ' cafés') +
+          (f.c || f.z ? nb + (q ? ' résultat' : ' établissement') + (nb > 1 ? 's' : '') : 'Coche au moins une case') +
           (nb > 40 ? ' · 40 affichés, affine ta recherche' : '') + '</div>' +
-        (nb ? l.map((c) => '<button class="ligne-tech" data-l="' + ech(c.licence) + '" data-n="' + ech(c.nom) + '">' +
-          '<span style="flex:1;min-width:0"><span style="display:block;font-size:1rem;font-weight:700">' + ech(c.nom) + '</span>' +
-          '<span style="display:block;font-size:.82rem;color:var(--doux)">' + ech(c.ville) + ' · ' + ech(c.licence) + '</span></span>' +
+        (nb ? l.map((x) => '<button class="ligne-tech" data-l="' + ech(x.licence) + '" data-n="' + ech(x.nom) + '">' +
+          '<span style="flex:1;min-width:0"><span style="display:block;font-size:1rem;font-weight:700">' + ech(x.nom) + '</span>' +
+          '<span style="display:block;font-size:.82rem;color:var(--doux)">' + ech(x.ville || '—') + ' · ' + ech(x.licence) + '</span></span>' +
           CHEVRON + '</button>').join('')
-          : '<div class="vide">Aucun café ne correspond.</div>');
+          : '<div class="vide">Aucun établissement ne correspond.</div>');
     };
+    document.querySelector('.page').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-f]'); if (!b) return;
+      f[b.dataset.f] = !f[b.dataset.f];
+      etapeCafe();
+    });
     $('q').addEventListener('input', dessiner);
     $('c').addEventListener('click', (ev) => {
       const b = ev.target.closest('button[data-l]'); if (!b) return;
-      const c = listeCafes.find((x) => x.licence === b.dataset.l && x.nom === b.dataset.n);
-      if (!c) return;
-      brouillon.licence = c.licence; brouillon.cafe = c.nom; brouillon.ville = c.ville;
-      etapeType();
+      const x = listeCafes.find((y) => y.licence === b.dataset.l && y.nom === b.dataset.n);
+      if (!x) return;
+      brouillon.licence = x.licence; brouillon.cafe = x.nom; brouillon.ville = x.ville;
+      if (brouillon.type === 'PANNE') etapeMachines(); else { brouillon.appareil = brouillon.type; etapeNature(); }
     });
     dessiner();
     $('q').focus();
   }
-
-  /* --- Étape 2a : le type d'intervention --- */
-  function etapeType() {
-    const ligne = (v) => {
-      const c = COULEURS[v] || 'panne';
-      return '<button class="ligne-tech" data-t="' + ech(v) + '">' +
-        '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
-          (ICONES[v] || ICONES['PANNE']) + '</span>' +
-        '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(LIBELLES[v] || v) + '</span>' + CHEVRON + '</button>';
-    };
-    app().innerHTML =
-      '<div class="page">' + barreCreation('Type d’intervention', 2) +
-        '<div class="contenu">' +
-          '<div class="bloc" style="padding:12px 16px;flex-direction:row;align-items:center;gap:10px">' +
-            SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>').replace('<svg', '<svg style="width:20px;height:20px;flex:none;color:var(--doux)"') +
-            '<span style="flex:1;min-width:0;font-size:.95rem;font-weight:700">' + ech(brouillon.cafe) + '</span>' +
-            '<span style="font-size:.82rem;color:var(--doux)">' + ech(brouillon.ville) + '</span></div>' +
-          TYPES_CREATION.map(ligne).join('') +
-        '</div></div>';
-    $('b-ret').addEventListener('click', () => etapeCafe());
-    document.querySelector('.contenu').addEventListener('click', (ev) => {
-      const b = ev.target.closest('button[data-t]'); if (!b) return;
-      brouillon.type = b.dataset.t;
-      brouillon.machines = [];
-      // Seule une panne demande de désigner les machines concernées.
-      if (brouillon.type === 'PANNE') etapeMachines(); else { brouillon.appareil = brouillon.type; etapeNature(); }
-    });
-  }
+  function txtMaj(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
 
   /* --- Étape 2b : quelles machines sont en panne (plusieurs possibles) --- */
   function etapeMachines(msg) {
@@ -437,7 +448,7 @@
         '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(v) + '</span></button>';
     };
     app().innerHTML =
-      '<div class="page">' + barreCreation('Quelle machine ?', 2) +
+      '<div class="page">' + barreCreation('Quelle machine ?', 3) +
         '<div class="contenu" style="padding-bottom:8px">' +
           (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
           '<div style="font-size:.85rem;color:var(--doux);padding:0 4px;line-height:1.45">' +
@@ -449,7 +460,7 @@
             (choisies.length ? 'Continuer avec ' + choisies.length + ' machine' + (choisies.length > 1 ? 's' : '') : 'Choisis au moins une machine') +
           '</button>' +
         '</div></div>';
-    $('b-ret').addEventListener('click', () => etapeType());
+    $('b-ret').addEventListener('click', () => etapeCafe());
     document.querySelector('.contenu').addEventListener('click', (ev) => {
       const b = ev.target.closest('button[data-m]'); if (!b) return;
       const v = b.dataset.m, i = choisies.indexOf(v);
@@ -487,7 +498,7 @@
             '<textarea id="n" rows="5" placeholder="Décris le problème en quelques mots">' + ech(brouillon.nature) + '</textarea></div>' +
           '<button class="btn btn-principal" type="submit">Continuer</button>' +
         '</form></div>';
-    $('b-ret').addEventListener('click', () => brouillon.type === 'PANNE' ? etapeMachines() : etapeType());
+    $('b-ret').addEventListener('click', () => brouillon.type === 'PANNE' ? etapeMachines() : etapeCafe());
     $('f').addEventListener('submit', (ev) => {
       ev.preventDefault();
       const n = $('n').value.trim();
@@ -629,7 +640,14 @@
                 SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>') +
                 '<span style="flex:1"><span style="display:block;font-size:.75rem;color:var(--doux)">Adresse</span>' +
                 '<span style="display:block;font-size:.95rem;font-weight:600">' + ech(adresse) + '</span></span>' +
-              '</div></div>' +
+              '</div>' +
+              // Téléphone du café : permet d'appeler avant de se déplacer.
+              (i.telephone ? '<a class="carte-tel" href="tel:' + ech(String(i.telephone).replace(/[^0-9+]/g, '')) + '">' +
+                SVG('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>') +
+                '<span style="flex:1"><span style="display:block;font-size:.75rem;color:var(--doux)">Téléphone</span>' +
+                '<span style="display:block;font-size:.95rem;font-weight:700">' + ech(i.telephone) + '</span></span>' +
+                CHEVRON + '</a>' : '') +
+              '</div>' +
             '<div class="itineraire">' +
               '<a class="it-plan" href="https://maps.apple.com/?daddr=' + encodeURIComponent(adresse) + '&dirflg=d" target="_blank" rel="noopener">' +
                 SVG('<path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/>') + 'Plan</a>' +

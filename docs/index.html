@@ -162,6 +162,17 @@
   .coche.prise { background: var(--panne); border-color: var(--panne); }
   .coche svg { width: 17px; height: 17px; stroke-width: 3; }
 
+  .filtre-lic { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px;
+    border-radius: 12px; border: 1px solid var(--bord); background: var(--carte); color: var(--texte);
+    font-size: .95rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+  .filtre-lic.pris { border-color: var(--accent); background: var(--accent-c); color: var(--accent); }
+  .filtre-lic .coche { width: 20px; height: 20px; border-radius: 6px; }
+  .filtre-lic .coche.prise { background: var(--accent); border-color: var(--accent); }
+  .filtre-lic .coche svg { width: 13px; height: 13px; }
+  .carte-tel { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--bord);
+    background: var(--carte); color: var(--texte); text-decoration: none; }
+  .carte-tel svg { width: 20px; height: 20px; flex: none; color: var(--cours); }
+
   /* ---------- Connexion ---------- */
   .connexion { flex: 1; display: flex; flex-direction: column; padding: 0 16px; }
   .logo-rond {
@@ -219,6 +230,6 @@
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js?v=8" defer></script>
+<script src="app.js?v=9" defer></script>
 </body>
 </html>
