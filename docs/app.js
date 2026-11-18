@@ -161,7 +161,7 @@
           '</div>' +
           '<div style="text-align:center;font-size:.88rem;color:var(--doux);padding:0 12px;line-height:1.45">Mot de passe perdu ? Préviens Marc, il le réinitialise.</div>' +
         '</form>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.4</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.5</div>' +
       '</div>';
     $('voir').addEventListener('click', () => {
       const c = $('mdp'); c.type = c.type === 'password' ? 'text' : 'password';
@@ -326,18 +326,202 @@
     if (document.querySelector('header')) vueListe();
   }
 
-  /* ---------- Écran : nouvelle intervention (en construction) ---------- */
+  /* ---------- Écrans : nouvelle intervention (café, appareil, nature, prendre ou déposer) ---------- */
+
+  // Types proposés à la création, dans l'ordre d'AppSheet. Les appareils de jeu sont listés ensuite.
+  const TYPES_CREATION = ['MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'AUTRE', 'RAPPEL'];
+  const APPAREILS_JEU = ['MONTANA LUXE II', 'DAYTONA', 'NEVADA', 'ZEUS', 'ARIZONA', 'MK3', 'MK4', 'ACTION PACK',
+    'TOP MACHINE', 'GREYHOUND', 'TEXAS', 'KICKER', 'BILLARD', 'FLECHE', 'INDETERMINE'];
+  let brouillon = null;
+  let listeCafes = null;
+
   function vueNouvelle() {
+    brouillon = { licence: '', cafe: '', ville: '', appareil: '', nature: '' };
+    etapeCafe();
+  }
+
+  // Barre du haut commune aux écrans de création, avec le numéro d'étape.
+  function barreCreation(titre, etape, retour) {
+    return '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
+      '<div><h2>' + ech(titre) + '</h2>' +
+      '<div style="font-size:.8rem;color:var(--doux)">Étape ' + etape + ' sur 4</div></div></div>';
+  }
+
+  /* --- Étape 1 : le café --- */
+  async function etapeCafe(msg) {
     app().innerHTML =
-      '<div class="page">' +
-        '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
-          '<h2>Nouvelle intervention</h2></div>' +
-        '<div class="contenu">' +
-          '<div class="msg msg-info">Cet écran est en cours de construction. En attendant, encode la panne dans AppSheet : elle apparaîtra ici tout de suite.</div>' +
-          '<button class="btn btn-second" id="b-ret2">Retour à la liste</button>' +
+      '<div class="page">' + barreCreation('Quel café ?', 1) +
+        '<div style="padding:4px 16px 8px"><input id="q" type="search" placeholder="Chercher un café ou une ville" ' +
+          'autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;height:52px;border-radius:14px;' +
+          'border:1px solid var(--bord);background:var(--doux2);padding:0 14px;font-size:1.05rem"></div>' +
+        '<div class="contenu" id="c" style="padding-top:0">' +
+          (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
+          '<div class="chargement"><span class="tourne"></span> Chargement des cafés...</div>' +
         '</div></div>';
     $('b-ret').addEventListener('click', () => { vueListe(); chargerListe(); });
-    $('b-ret2').addEventListener('click', () => { vueListe(); chargerListe(); });
+
+    if (!listeCafes) {
+      const r = await appeler({ action: 'cafes' });
+      if (!r.ok) {
+        if (r.erreur === 'session_invalide') { router(); return; }
+        $('c').innerHTML = '<div class="msg msg-err">' + ech(dire(r.erreur)) + '</div>';
+        return;
+      }
+      listeCafes = r.cafes;
+    }
+    const dessiner = () => {
+      const q = ($('q').value || '').trim().toUpperCase();
+      let l = listeCafes;
+      if (q) l = l.filter((c) => (c.nom + ' ' + c.ville + ' ' + c.licence).toUpperCase().indexOf(q) >= 0);
+      const nb = l.length;
+      l = l.slice(0, 40);
+      $('c').innerHTML =
+        '<div style="font-size:.82rem;color:var(--doux);padding:0 4px 2px">' +
+          (q ? nb + ' résultat' + (nb > 1 ? 's' : '') : listeCafes.length + ' cafés') +
+          (nb > 40 ? ' · 40 affichés, affine ta recherche' : '') + '</div>' +
+        (nb ? l.map((c) => '<button class="ligne-tech" data-l="' + ech(c.licence) + '" data-n="' + ech(c.nom) + '">' +
+          '<span style="flex:1;min-width:0"><span style="display:block;font-size:1rem;font-weight:700">' + ech(c.nom) + '</span>' +
+          '<span style="display:block;font-size:.82rem;color:var(--doux)">' + ech(c.ville) + ' · ' + ech(c.licence) + '</span></span>' +
+          CHEVRON + '</button>').join('')
+          : '<div class="vide">Aucun café ne correspond.</div>');
+    };
+    $('q').addEventListener('input', dessiner);
+    $('c').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-l]'); if (!b) return;
+      const c = listeCafes.find((x) => x.licence === b.dataset.l && x.nom === b.dataset.n);
+      if (!c) return;
+      brouillon.licence = c.licence; brouillon.cafe = c.nom; brouillon.ville = c.ville;
+      etapeAppareil();
+    });
+    dessiner();
+    $('q').focus();
+  }
+
+  /* --- Étape 2 : l'appareil ou le type --- */
+  function etapeAppareil() {
+    const tuile = (v) => {
+      const c = COULEURS[typeDeValeur(v)] || 'panne';
+      return '<button class="ligne-tech" data-a="' + ech(v) + '">' +
+        '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
+          (ICONES[typeDeValeur(v)] || ICONES['PANNE']) + '</span>' +
+        '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(libelleValeur(v)) + '</span>' + CHEVRON + '</button>';
+    };
+    app().innerHTML =
+      '<div class="page">' + barreCreation('Quel appareil ?', 2) +
+        '<div class="contenu">' +
+          '<div class="bloc" style="padding:12px 16px;flex-direction:row;align-items:center;gap:10px">' +
+            SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>').replace('<svg', '<svg style="width:20px;height:20px;flex:none;color:var(--doux)"') +
+            '<span style="font-size:.95rem;font-weight:700">' + ech(brouillon.cafe) + '</span>' +
+            '<span style="font-size:.82rem;color:var(--doux)">' + ech(brouillon.ville) + '</span></div>' +
+          '<div class="lib" style="padding:6px 4px 0;font-size:.8rem;font-weight:700;color:var(--doux)">Type d’intervention</div>' +
+          TYPES_CREATION.map(tuile).join('') +
+          '<div class="lib" style="padding:14px 4px 0;font-size:.8rem;font-weight:700;color:var(--doux)">Appareil de jeu (panne)</div>' +
+          APPAREILS_JEU.map(tuile).join('') +
+        '</div></div>';
+    $('b-ret').addEventListener('click', () => etapeCafe());
+    document.querySelector('.contenu').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-a]'); if (!b) return;
+      brouillon.appareil = b.dataset.a;
+      etapeNature();
+    });
+  }
+  // Pour l'affichage seulement : un appareil de jeu est une panne.
+  function typeDeValeur(v) { return TYPES_CREATION.indexOf(v) >= 0 ? v : 'PANNE'; }
+  function libelleValeur(v) { return TYPES_CREATION.indexOf(v) >= 0 ? (LIBELLES[v] || v) : v; }
+
+  /* --- Étape 3 : la nature de la panne --- */
+  function etapeNature(msg) {
+    const t = typeDeValeur(brouillon.appareil), c = COULEURS[t] || 'panne';
+    app().innerHTML =
+      '<div class="page">' + barreCreation('Que se passe-t-il ?', 3) +
+        '<form id="f" class="contenu">' +
+          (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
+          '<div class="bloc" style="flex-direction:row;align-items:center;gap:12px">' +
+            '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
+              (ICONES[t] || ICONES['PANNE']) + '</span>' +
+            '<span style="flex:1;min-width:0"><span style="display:block;font-size:1rem;font-weight:700">' + ech(brouillon.cafe) + '</span>' +
+            '<span style="display:block;font-size:.82rem;color:var(--doux)">' + ech(libelleValeur(brouillon.appareil)) + ' · ' + ech(brouillon.ville) + '</span></span></div>' +
+          '<div class="champ"><label for="n">Nature de la panne</label>' +
+            '<textarea id="n" rows="5" placeholder="Décris le problème en quelques mots">' + ech(brouillon.nature) + '</textarea></div>' +
+          '<button class="btn btn-principal" type="submit">Continuer</button>' +
+        '</form></div>';
+    $('b-ret').addEventListener('click', () => etapeAppareil());
+    $('f').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      const n = $('n').value.trim();
+      if (!n) { etapeNature('Décris le problème avant de continuer.'); return; }
+      brouillon.nature = n;
+      etapeChoix();
+    });
+  }
+
+  /* --- Étape 4 : je la prends ou je la dépose --- */
+  function etapeChoix(msg) {
+    const t = typeDeValeur(brouillon.appareil), c = COULEURS[t] || 'panne';
+    app().innerHTML =
+      '<div class="page">' + barreCreation('Tu la prends ?', 4) +
+        '<div class="contenu">' +
+          (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
+          '<div class="carte" style="box-shadow:none">' +
+            '<div class="liseret" style="background:var(--' + c + ')"></div>' +
+            '<div class="carte-corps">' +
+              '<div class="carte-haut">' +
+                '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
+                  (ICONES[t] || ICONES['PANNE']) + '</span>' +
+                '<span class="carte-titres"><span class="nom">' + ech(brouillon.cafe) + '</span>' +
+                '<span class="sous">' + ech(brouillon.ville) + ' · ' + ech(libelleValeur(brouillon.appareil)) + '</span></span></div>' +
+              '<div class="nature">' + ech(brouillon.nature) + '</div>' +
+            '</div></div>' +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="btn btn-prendre" id="b-prendre">' +
+            SVG('<path d="M20 6L9 17l-5-5"/>') + 'Je la prends</button>' +
+          '<button class="btn btn-second" id="b-deposer">' +
+            SVG('<path d="M12 5v14M5 12h14"/>') + 'Je la dépose pour tout le monde</button>' +
+          '<div style="text-align:center;font-size:.8rem;color:var(--doux);line-height:1.45">' +
+            'Déposée : elle part en attente et le groupe est prévenu du lundi au vendredi, de 9 h à 17 h.</div>' +
+        '</div></div>';
+    $('b-ret').addEventListener('click', () => etapeNature());
+    $('b-prendre').addEventListener('click', () => envoyerCreation(true));
+    $('b-deposer').addEventListener('click', () => envoyerCreation(false));
+  }
+
+  async function envoyerCreation(prendre) {
+    if (etat.enCours) return;
+    etat.enCours = true;
+    const b = $(prendre ? 'b-prendre' : 'b-deposer');
+    const autre = $(prendre ? 'b-deposer' : 'b-prendre');
+    b.disabled = true; autre.disabled = true; b.textContent = 'Enregistrement...';
+    const r = await appeler({ action: 'creer', licence: brouillon.licence, cafe: brouillon.cafe,
+                              appareil: brouillon.appareil, nature: brouillon.nature, prendre });
+    etat.enCours = false;
+    if (!r.ok) {
+      if (r.erreur === 'session_invalide') { router(); return; }
+      etapeChoix(dire(r.erreur));
+      return;
+    }
+    etapeConfirmation(prendre);
+  }
+
+  /* --- Confirmation --- */
+  function etapeConfirmation(prendre) {
+    const vert = prendre ? 'var(--cours)' : 'var(--accent)';
+    app().innerHTML =
+      '<div class="page">' +
+        '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center">' +
+          '<div style="width:90px;height:90px;border-radius:45px;background:' + vert + ';color:#fff;display:flex;align-items:center;justify-content:center">' +
+            SVG('<path d="M20 6L9 17l-5-5"/>').replace('<svg', '<svg style="width:46px;height:46px" stroke-width="2.5"') + '</div>' +
+          '<div><div style="font-weight:800;font-size:1.5rem;letter-spacing:-.02em">' +
+            (prendre ? 'Intervention prise' : 'Intervention déposée') + '</div>' +
+            '<div style="font-size:.95rem;color:var(--doux);margin-top:6px;line-height:1.5">' + ech(brouillon.cafe) + '<br>' +
+            (prendre ? 'Elle est en cours à ton nom.' : 'Elle est en attente pour tout le monde.') + '</div></div>' +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="btn btn-principal" id="b-liste">Voir la liste</button>' +
+          '<button class="btn btn-second" id="b-encore">Encoder une autre intervention</button>' +
+        '</div></div>';
+    $('b-liste').addEventListener('click', () => { vueListe(); chargerListe(true); });
+    $('b-encore').addEventListener('click', vueNouvelle);
   }
 
   /* ---------- Écran : détail d'une intervention ---------- */
