@@ -1,5 +1,5 @@
 # Relais « techniciens » (Cloudflare Worker + Durable Object). Indépendant du relais d'encodage des pannes.
-# Secrets à saisir dans Cloudflare (jamais dans ce fichier) : GOOGLE_SA_JSON, SETUP_KEY
+# Secrets à saisir dans Cloudflare (jamais dans ce fichier) : GOOGLE_SA_JSON, SETUP_KEY, PUSHOVER_TOKEN, PUSHOVER_USER
 name = "pannes-techniciens-relais"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
@@ -7,6 +7,7 @@ compatibility_date = "2026-09-01"
 [vars]
 SHEET_ID = "1z5dCERKZSFrZ5SBw_e5PVCws6PWtIytEFmFklTBwUH4"
 ONGLET_REPONSES = "Réponses au formulaire 1"
+ONGLET_PLACES = "places"
 ORIGINE_AUTORISEE = "https://marc1768.github.io"
 
 [[durable_objects.bindings]]
