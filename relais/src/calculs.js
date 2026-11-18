@@ -129,3 +129,53 @@ export function dureeSerie(debut, fin) {
   if (typeof debut !== 'number' || typeof fin !== 'number' || !isFinite(debut) || !isFinite(fin)) return '';
   return Math.round((fin - debut) * 86400) / 86400;
 }
+
+/* ---------- Horodateur et fenêtre d'envoi des notifications ---------- */
+
+// « aaaa-MM-jj hh:mm:ss » à l'heure de Bruxelles : le texte écrit dans la colonne Horodateur.
+export function texteBruxelles(date) {
+  const p = {};
+  new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+    .formatToParts(date || new Date()).forEach((x) => { p[x.type] = x.value; });
+  return p.year + '-' + p.month + '-' + p.day + ' ' + p.hour + ':' + p.minute + ':' + p.second;
+}
+
+// Dimanche de Pâques (calcul de Gauss), en UTC.
+function paques(an) {
+  const a = an % 19, b = Math.floor(an / 100), c = an % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mois = Math.floor((h + l - 7 * m + 114) / 31);
+  const jour = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(an, mois - 1, jour);
+}
+
+// Les dix jours fériés légaux belges d'une année, en « aaaa-MM-jj ».
+export function joursFeries(an) {
+  const p = paques(an), J = 86400000;
+  const d = (ms) => new Date(ms).toISOString().slice(0, 10);
+  return new Set([
+    d(Date.UTC(an, 0, 1)), d(p + J), d(Date.UTC(an, 4, 1)), d(p + 39 * J), d(p + 50 * J),
+    d(Date.UTC(an, 6, 21)), d(Date.UTC(an, 7, 15)), d(Date.UTC(an, 10, 1)),
+    d(Date.UTC(an, 10, 11)), d(Date.UTC(an, 11, 25))
+  ]);
+}
+
+const cacheFeries = {};
+// Pushover au groupe : seulement du lundi au vendredi, de 9 h à 17 h (heure de Bruxelles),
+// jamais les jours fériés belges, jamais le week-end, rien avant 9 h ni après 17 h.
+export function fenetreNotification(date) {
+  const p = {};
+  new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', weekday: 'short', hourCycle: 'h23' })
+    .formatToParts(date || new Date()).forEach((x) => { p[x.type] = x.value; });
+  if (p.weekday === 'Sat' || p.weekday === 'Sun') return false;
+  const heure = Number(p.hour);
+  if (heure < 9 || heure >= 17) return false;
+  const an = Number(p.year);
+  if (!cacheFeries[an]) cacheFeries[an] = joursFeries(an);
+  return !cacheFeries[an].has(p.year + '-' + p.month + '-' + p.day);
+}

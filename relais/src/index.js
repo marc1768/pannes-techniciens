@@ -27,7 +27,7 @@ import { DurableObject } from 'cloudflare:workers';
 import {
   APPAREILS, STATUTS_ACTIFS, txt, listeValeurs, joindre, nettoyer, typeDe, priorite, reserveLe, livraisonLe,
   encaisser, natureCourte, consigne, ticketLiv, colonne, serieBruxelles, isoDepuisSerie, FORMAT_DATE_HEURE,
-  FORMAT_DUREE, dureeSerie
+  FORMAT_DUREE, dureeSerie, texteBruxelles, fenetreNotification
 } from './calculs.js';
 
 const MDP_PROVISOIRE = '123456';
@@ -38,6 +38,11 @@ const BLOCAGE_MS = 600 * 1000;
 const JETON_LONG_MS = 365 * 86400 * 1000;
 const JETON_COURT_MS = 12 * 3600 * 1000;
 const LIGNES_LISTE = 500;
+const CACHE_PLACES_MS = 600 * 1000;      // liste des cafés : 10 minutes
+// Titre de la notification Pushover selon le type, comme la PWA d'encodage.
+const TITRES = { 'MACHINE A CAFE': 'Machine à café', 'ENTRETIEN': 'Nouvel entretien',
+                 'LIVRAISON': 'Nouvelle livraison', 'LIVRAISON HORECA': 'Nouvelle livraison Horeca',
+                 'RAPPEL': 'Nouvelle alerte' };
 const COLONNES_REQUISES = ['Horodateur', 'Technicien', 'Café/Salle:', 'Ville', 'Appareils café', 'Nature de la panne',
   'Début', 'Fin', 'Durée', 'Statut', 'ReservePar', 'DateLivraison'];
 
@@ -80,6 +85,7 @@ export class Relais extends DurableObject {
     this.env = env;
     this.jetonGoogle_ = null;
     this.positions = null;
+    this.places = null;
     this.sheetIdNum = null;
     this.derniereLigne = 0;
     this.verrou = Promise.resolve();
@@ -107,6 +113,8 @@ export class Relais extends DurableObject {
       }
       switch (req.action) {
         case 'liste': return await this.liste();
+        case 'cafes': return await this.cafes();
+        case 'creer': return await this.avecVerrou(() => this.creer(u, req));
         case 'prendre': return await this.avecVerrou(() => this.agir('prendre', u, req));
         case 'accompagner': return await this.avecVerrou(() => this.agir('accompagner', u, req));
         case 'reserver': return await this.avecVerrou(() => this.agir('reserver', u, req));
@@ -488,6 +496,115 @@ export class Relais extends DurableObject {
       }
     }
     return { ok: false, erreur: 'action_inconnue' };
+  }
+
+
+  /* ---------- Cafés (onglet « places », cache 10 minutes) ---------- */
+
+  // Colonnes de l'onglet « places » : A licence, B nom, C adresse, D code postal, E ville, G société.
+  async lirePlaces() {
+    if (this.places && Date.now() - this.places.t < CACHE_PLACES_MS) return this.places.liste;
+    const onglet = this.env.ONGLET_PLACES || 'places';
+    const r = await this.sheets('/values/' + encodeURIComponent("'" + onglet.replace(/'/g, "''") + "'!A:G") +
+      '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER&majorDimension=ROWS', { method: 'GET' });
+    const donnees = r.values || [];
+    const liste = [];
+    for (let i = 1; i < donnees.length; i++) {
+      const l = donnees[i];
+      if (!l[0] || !l[1]) continue;
+      liste.push({ licence: txt(l[0]), nom: txt(l[1]), adresse: txt(l[2]),
+                   cp: l[3] === undefined ? '' : l[3], ville: txt(l[4]), societe: txt(l[6]) || 'Dongiovanni' });
+    }
+    this.places = { t: Date.now(), liste };
+    return liste;
+  }
+  async cafes() {
+    const liste = await this.lirePlaces();
+    return { ok: true, cafes: liste.map((p) => ({ licence: p.licence, nom: p.nom, ville: p.ville })) };
+  }
+  async trouverCafe(licence, nom) {
+    const lic = txt(licence).toUpperCase(), n = txt(nom).toUpperCase();
+    return (await this.lirePlaces()).find((p) => p.licence.toUpperCase() === lic && p.nom.toUpperCase() === n) || null;
+  }
+
+  /* ---------- Création d'une intervention (copie fidèle d'AppSheet) ---------- */
+
+  async creer(u, req) {
+    const pos = await this.lirePositions();
+    if (!pos) return { ok: false, erreur: 'colonne_manquante' };
+    const cafe = await this.trouverCafe(req.licence, req.cafe);
+    if (!cafe) return { ok: false, erreur: 'cafe_inconnu' };
+    const appareil = txt(req.appareil).toUpperCase();
+    if (!APPAREILS.includes(appareil)) return { ok: false, erreur: 'appareil_invalide' };
+    const nature = nettoyer(req.nature, 500);
+    const prendre = !!req.prendre;
+
+    // Horodateur unique à la seconde, heure de Bruxelles, comme la PWA d'encodage.
+    const { lignes } = await this.lireFin(30, pos['Horodateur'] + 1);
+    const pris = new Set(lignes.map((l) => isoDepuisSerie(l[pos['Horodateur']]).replace('T', ' ')));
+    let d = new Date(); d.setMilliseconds(0);
+    let horo = texteBruxelles(d);
+    while (pris.has(horo)) { d = new Date(d.getTime() + 1000); horo = texteBruxelles(d); }
+
+    const cp = /^\d+$/.test(String(cafe.cp)) ? Number(cafe.cp) : cafe.cp;
+    const maintenant = serieBruxelles(d);
+    const valeurs = {
+      'Horodateur': horo, 'Société': cafe.societe, 'Technicien': prendre ? u.nom : '',
+      'Café/Salle:': cafe.nom, 'Ville': cafe.ville, 'Appareils café': appareil, 'Appareils Salle': '',
+      'Nature de la panne': nature, 'Licence': cafe.licence, 'Adresse': cafe.adresse,
+      'Code Postal': cp, 'Début': '', 'Fin': '', 'Durée': '',
+      'Statut': prendre ? 'En cours' : 'En attente'
+    };
+    let maxPos = 0;
+    for (const k in valeurs) if (pos[k] !== undefined && pos[k] > maxPos) maxPos = pos[k];
+    const tableau = new Array(maxPos + 1).fill('');
+    for (const k in valeurs) if (pos[k] !== undefined) tableau[pos[k]] = valeurs[k];
+
+    const depart = Math.max(2, this.derniereLigne || 2);
+    const a1 = encodeURIComponent(this.plage('A' + depart + ':' + colonne(maxPos)));
+    const rep = await this.sheets('/values/' + a1 + ':append?valueInputOption=USER_ENTERED&insertDataOption=OVERWRITE&includeValuesInResponse=false',
+      { method: 'POST', body: JSON.stringify({ majorDimension: 'ROWS', values: [tableau] }) });
+    const m = /![A-Z]+(\d+)/.exec((rep.updates && rep.updates.updatedRange) || '');
+    const ligne = m ? Number(m[1]) : 0;
+    if (!ligne) return { ok: false, erreur: 'erreur_serveur' };
+    if (ligne > this.derniereLigne) this.derniereLigne = ligne;
+
+    // Format de l'Horodateur, identique à la PWA d'encodage.
+    const formats = { 'Horodateur': { type: 'DATE_TIME', pattern: 'm/d/yyyy h:mm:ss' } };
+    // « Je la prends » : Début rempli tout de suite, comme le fait AppSheet.
+    if (prendre && pos['Début'] !== undefined) {
+      try {
+        await this.ecrire(ligne, pos, { 'Début': maintenant }, { 'Début': FORMAT_DATE_HEURE });
+      } catch (e) { console.error('Début à la création : ' + e); }
+    }
+    try { await this.formater(ligne, pos, formats); } catch (e) { console.error('Format horodateur : ' + e); }
+
+    // Pushover seulement si la panne est déposée pour tout le monde, et dans la fenêtre autorisée.
+    if (!prendre && fenetreNotification(d)) {
+      this.notifier(TITRES[appareil] || 'Nouvelle intervention',
+        cafe.nom + ' (' + cafe.ville + ')' + (nature ? '\n' + nature : ''));
+    }
+    return { ok: true, ligne, horodateur: horo, statut: valeurs['Statut'] };
+  }
+
+  formater(ligne, pos, formats) {
+    const requetes = Object.keys(formats || {}).filter((k) => pos[k] !== undefined).map((k) => ({ repeatCell: {
+      range: { sheetId: 0, startRowIndex: ligne - 1, endRowIndex: ligne, startColumnIndex: pos[k], endColumnIndex: pos[k] + 1 },
+      cell: { userEnteredFormat: { numberFormat: formats[k] } }, fields: 'userEnteredFormat.numberFormat' } }));
+    if (!requetes.length) return Promise.resolve();
+    return this.idOnglet().then((id) => {
+      requetes.forEach((q) => { q.repeatCell.range.sheetId = id; });
+      return this.sheets(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: requetes }) });
+    });
+  }
+
+  // Envoi Pushover au groupe : n'attend pas, une notification ratée ne bloque jamais l'écriture.
+  notifier(titre, message) {
+    const token = this.env.PUSHOVER_TOKEN, user = this.env.PUSHOVER_USER;
+    if (!token || !user) return;
+    const url = this.env.PUSHOVER_API || 'https://api.pushover.net/1/messages.json';
+    this.ctx.waitUntil(fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token, user, title: titre, message }).toString() }).catch(() => {}));
   }
 
   // Champs facultatifs du formulaire de clôture (copie fidèle de Cloture_form). La signature et les pièces
