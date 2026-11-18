@@ -260,7 +260,8 @@ export class Relais extends DurableObject {
   async admin(moi, req) {
     const liste = await this.tousUtilisateurs();
     if (req.action === 'admin_liste') {
-      return { ok: true, utilisateurs: liste.map((u) => ({ nom: u.nom, role: u.role, actif: u.actif, provisoire: !!u.provisoire, dernier: u.dernier || 0 }))
+      return { ok: true, utilisateurs: liste.map((u) => ({ nom: u.nom, role: u.role, actif: u.actif, provisoire: !!u.provisoire,
+        email: u.email || '', dernier: u.dernier || 0 }))
         .sort((a, b) => a.nom.localeCompare(b.nom)) };
     }
     const nom = normaliserNom(req.nom);
@@ -272,13 +273,32 @@ export class Relais extends DurableObject {
       case 'admin_ajouter': {
         if (cible) return { ok: false, erreur: 'existe_deja' };
         if (mdp.length < MDP_MIN) return { ok: false, erreur: 'mdp_court' };
-        await this.ecrireUtilisateur(Object.assign({ nom, role: 'technicien', actif: true, provisoire: true, version: 1, cree: Date.now(), dernier: 0 },
+        const role = req.role === 'admin' ? 'admin' : 'technicien';
+        await this.ecrireUtilisateur(Object.assign({ nom, role, actif: true, provisoire: true, version: 1,
+                                                     email: courriel(req.email), cree: Date.now(), dernier: 0 },
                                                    await this.creerSecret(mdp)));
-        return { ok: true, nom, motdepasse: mdp };
+        return { ok: true, nom, role, motdepasse: mdp };
+      }
+      // Changer le rôle d'un compte. Le dernier administrateur actif ne peut pas être rétrogradé.
+      case 'admin_role': {
+        if (!cible) return { ok: false, erreur: 'inconnu' };
+        const role = req.role === 'admin' ? 'admin' : 'technicien';
+        if (role !== 'admin' && cible.role === 'admin' && cible.actif && admins.length <= 1) return { ok: false, erreur: 'dernier_admin' };
+        cible.role = role; cible.version += 1;
+        await this.ecrireUtilisateur(cible);
+        return { ok: true, nom, role };
+      }
+      // Enregistrer ou corriger l'adresse e-mail, qui sert à envoyer l'invitation.
+      case 'admin_email': {
+        if (!cible) return { ok: false, erreur: 'inconnu' };
+        cible.email = courriel(req.email);
+        await this.ecrireUtilisateur(cible);
+        return { ok: true, nom, email: cible.email };
       }
       case 'admin_reinitialiser': {
         if (!cible) return { ok: false, erreur: 'inconnu' };
         if (mdp.length < MDP_MIN) return { ok: false, erreur: 'mdp_court' };
+        if (req.email !== undefined) cible.email = courriel(req.email);
         Object.assign(cible, await this.creerSecret(mdp), { provisoire: true, version: cible.version + 1 });
         await this.ecrireUtilisateur(cible);
         return { ok: true, nom, motdepasse: mdp };
@@ -643,6 +663,13 @@ export class Relais extends DurableObject {
 
 /* ---------- Utilitaires ---------- */
 
+// Adresse e-mail d'un compte : sert à lui envoyer son invitation.
+// Une adresse qui ne ressemble à rien est refusée plutôt qu'enregistrée de travers.
+function courriel(v) {
+  const s = String(v === undefined || v === null ? '' : v).trim();
+  if (!s || s.length > 160) return '';
+  return /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(s) ? s : '';
+}
 function normaliserNom(n) {
   const s = String(n === undefined || n === null ? '' : n).trim().toUpperCase();
   return /^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(s) ? s : '';
