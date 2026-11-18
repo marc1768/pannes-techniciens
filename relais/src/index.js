@@ -430,6 +430,7 @@ export class Relais extends DurableObject {
         if (p.licence && p.telephone) annuaire.set(p.licence.toUpperCase(), p.telephone);
       });
       interventions.forEach((i) => { i.telephone = annuaire.get(txt(i.licence).toUpperCase()) || ''; });
+    } catch (e) { /* confort : son absence ne bloque pas la liste */ }
     // Produits à charger, pour les livraisons Horeca venues d'une vente au comptoir.
     try {
       if (interventions.some((i) => i.type === 'LIVRAISON HORECA')) {
