@@ -381,6 +381,7 @@ export class Relais extends DurableObject {
     return {
       ligne, horodateur: serie, horodateurTexte: isoDepuisSerie(serie),
       cafe: txt(l[pos['Café/Salle:']]), ville: txt(l[pos['Ville']]), appareil, type: typeDe(appareil), nature,
+      licence: pos['Licence'] === undefined ? '' : txt(l[pos['Licence']]),
       adresse: pos['Adresse'] === undefined ? '' : txt(l[pos['Adresse']]),
       codePostal: pos['Code Postal'] === undefined ? '' : txt(l[pos['Code Postal']]),
       statut, techniciens: listeValeurs(l[pos['Technicien']]), reservePar,
@@ -401,6 +402,14 @@ export class Relais extends DurableObject {
     const interventions = [];
     lignes.forEach((l, i) => { if (STATUTS_ACTIFS[txt(l[pos['Statut']])]) interventions.push(this.fiche(l, pos, premiere + i, aujourdhui)); });
     interventions.sort((a, b) => a.priorite - b.priorite || a.horodateur - b.horodateur);
+    // Téléphone du café, lu dans l'onglet « places ». Jamais écrit dans la feuille.
+    try {
+      const annuaire = new Map();
+      (await this.lirePlaces()).forEach((p) => {
+        if (p.licence && p.telephone) annuaire.set(p.licence.toUpperCase(), p.telephone);
+      });
+      interventions.forEach((i) => { i.telephone = annuaire.get(txt(i.licence).toUpperCase()) || ''; });
+    } catch (e) { /* confort : son absence ne bloque pas la liste */ }
     return { ok: true, interventions, maintenant: serieBruxelles(new Date()) };
   }
 
@@ -505,7 +514,7 @@ export class Relais extends DurableObject {
   async lirePlaces() {
     if (this.places && Date.now() - this.places.t < CACHE_PLACES_MS) return this.places.liste;
     const onglet = this.env.ONGLET_PLACES || 'places';
-    const r = await this.sheets('/values/' + encodeURIComponent("'" + onglet.replace(/'/g, "''") + "'!A:G") +
+    const r = await this.sheets('/values/' + encodeURIComponent("'" + onglet.replace(/'/g, "''") + "'!A:L") +
       '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER&majorDimension=ROWS', { method: 'GET' });
     const donnees = r.values || [];
     const liste = [];
@@ -513,14 +522,16 @@ export class Relais extends DurableObject {
       const l = donnees[i];
       if (!l[0] || !l[1]) continue;
       liste.push({ licence: txt(l[0]), nom: txt(l[1]), adresse: txt(l[2]),
-                   cp: l[3] === undefined ? '' : l[3], ville: txt(l[4]), societe: txt(l[6]) || 'Dongiovanni' });
+                   cp: l[3] === undefined ? '' : l[3], ville: txt(l[4]), societe: txt(l[6]) || 'Dongiovanni',
+                   telephone: txt(l[11]) });
     }
     this.places = { t: Date.now(), liste };
     return liste;
   }
   async cafes() {
     const liste = await this.lirePlaces();
-    return { ok: true, cafes: liste.map((p) => ({ licence: p.licence, nom: p.nom, ville: p.ville })) };
+    return { ok: true, cafes: liste.map((p) => ({ licence: p.licence, nom: p.nom, ville: p.ville,
+      adresse: p.adresse, cp: p.cp, telephone: p.telephone })) };
   }
   async trouverCafe(licence, nom) {
     const lic = txt(licence).toUpperCase(), n = txt(nom).toUpperCase();
