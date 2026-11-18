@@ -796,7 +796,120 @@
 
   /* ---------- Écran : gérer les techniciens (administrateur) ---------- */
   let ouvert = '';
-undefined
+  async function vueTechniciens(msg, ok) {
+    app().innerHTML =
+      '<div class="page">' +
+        '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
+          '<h2>Comptes</h2></div>' +
+        '<div class="contenu" id="c"><div class="chargement"><span class="tourne"></span> Chargement...</div></div>' +
+      '</div>';
+    $('b-ret').addEventListener('click', vueCompte);
+    const r = await appeler({ action: 'admin_liste' });
+    if (!r.ok) { $('c').innerHTML = '<div class="msg msg-err">' + ech(dire(r.erreur)) + '</div>'; return; }
+    // Un seul administrateur actif : il ne peut être ni rétrogradé, ni désactivé, ni supprimé.
+    const seulAdmin = r.utilisateurs.filter((u) => u.role === 'admin' && u.actif).length <= 1;
+    const lignes = r.utilisateurs.map((u) => {
+      const moi = u.nom === etat.moi.nom;
+      const dernier = seulAdmin && u.role === 'admin' && u.actif;
+      const badge = !u.actif ? '<span class="badge badge-off">Désactivé</span>'
+        : u.provisoire ? '<span class="badge badge-prov">Mdp provisoire</span>'
+        : u.role === 'admin' ? '<span class="badge badge-admin">Admin</span>'
+        : '<span class="badge badge-actif">Actif</span>';
+      const haut = '<span class="rond' + (moi ? ' moi' : '') + '">' + ech(initiale(u.nom)) + '</span>' +
+        '<span style="flex:1;min-width:0"><span style="display:block;font-size:1rem;font-weight:800">' + ech(u.nom) +
+          (moi ? ' <span style="font-size:.8rem;font-weight:600;color:var(--doux)">· toi</span>' : '') + '</span>' +
+          (u.email ? '<span style="display:block;font-size:.78rem;color:var(--doux)">' + ech(u.email) + '</span>' : '') +
+        '</span>' + badge;
+      if (ouvert !== u.nom) {
+        return '<button class="ligne-tech" data-n="' + ech(u.nom) + '">' + haut + CHEVRON + '</button>';
+      }
+      const autreRole = u.role === 'admin' ? 'technicien' : 'admin';
+      return '<div class="ligne-tech ouvert"><div style="min-height:64px;display:flex;align-items:center;gap:12px">' + haut + '</div>' +
+        '<div class="champ" style="margin-top:4px"><label for="em">Adresse e-mail (pour l’invitation)</label>' +
+          '<input id="em" type="email" inputmode="email" autocapitalize="off" spellcheck="false" ' +
+          'placeholder="prenom@exemple.be" value="' + ech(u.email || '') + '"></div>' +
+        '<div class="petits">' +
+          '<button class="pr" data-act="admin_email" data-n="' + ech(u.nom) + '">Enregistrer l’e-mail</button>' +
+        '</div>' +
+        '<div class="petits">' +
+          '<button class="pr" data-act="admin_reinitialiser" data-n="' + ech(u.nom) + '">Réinitialiser</button>' +
+          (dernier ? '' :
+            '<button class="sec" data-act="admin_role" data-r="' + autreRole + '" data-n="' + ech(u.nom) + '">' +
+              (u.role === 'admin' ? 'Passer technicien' : 'Passer administrateur') + '</button>') +
+        '</div>' +
+        (dernier ? '<div style="font-size:.78rem;color:var(--doux);padding:2px 4px 0;line-height:1.4">' +
+            'Seul administrateur : son rôle et son compte sont protégés.</div>' :
+          '<div class="petits">' +
+            '<button class="sec" data-act="' + (u.actif ? 'admin_desactiver' : 'admin_activer') + '" data-n="' + ech(u.nom) + '">' +
+              (u.actif ? 'Désactiver' : 'Réactiver') + '</button>' +
+            '<button data-act="admin_supprimer" data-n="' + ech(u.nom) + '">Supprimer</button>' +
+          '</div>') +
+        '</div>';
+    }).join('');
+    $('c').innerHTML =
+      (msg ? '<div class="msg ' + (ok ? 'msg-ok' : 'msg-err') + '">' + ech(msg) + '</div>' : '') +
+      '<div style="font-size:.82rem;color:var(--doux);padding:0 4px 4px">' + r.utilisateurs.length + ' comptes. Touche un nom pour agir.</div>' +
+      lignes +
+      '<form id="f-add" class="bloc" style="gap:12px;margin-top:8px">' +
+        '<div class="lib">Ajouter un compte</div>' +
+        '<div class="champ"><label for="nn" class="sr">Nom</label>' +
+          '<input id="nn" type="text" placeholder="DAVID" autocapitalize="characters" spellcheck="false" required style="font-weight:700"></div>' +
+        '<div class="champ"><label for="ne">Adresse e-mail (facultative)</label>' +
+          '<input id="ne" type="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="prenom@exemple.be"></div>' +
+        '<div class="champ"><label for="mp">Mot de passe provisoire</label><input id="mp" type="text" value="123456"></div>' +
+        '<div class="champ"><label>Rôle</label>' +
+          '<div style="display:flex;gap:8px">' +
+            '<button type="button" class="filtre-lic pris" id="r-tech">Technicien</button>' +
+            '<button type="button" class="filtre-lic" id="r-adm">Administrateur</button>' +
+          '</div></div>' +
+        '<button class="btn btn-principal" type="submit" id="b-add" style="height:50px">Ajouter</button>' +
+      '</form>';
+
+    // Choix du rôle du futur compte : deux boutons qui s'excluent.
+    let roleNeuf = 'technicien';
+    const majRole = () => {
+      $('r-tech').className = 'filtre-lic' + (roleNeuf === 'technicien' ? ' pris' : '');
+      $('r-adm').className = 'filtre-lic' + (roleNeuf === 'admin' ? ' pris' : '');
+    };
+    $('r-tech').addEventListener('click', () => { roleNeuf = 'technicien'; majRole(); });
+    $('r-adm').addEventListener('click', () => { roleNeuf = 'admin'; majRole(); });
+
+    $('c').addEventListener('click', async (ev) => {
+      const a = ev.target.closest('button[data-act]');
+      if (a) {
+        const act = a.dataset.act, qui = a.dataset.n;
+        if (act === 'admin_supprimer' && !confirm('Supprimer définitivement le compte ' + qui + ' ?')) return;
+        if (act === 'admin_role' && a.dataset.r === 'admin' &&
+            !confirm('Donner tous les droits d’administrateur à ' + qui + ' ?')) return;
+        a.disabled = true;
+        const envoi = { action: act, nom: qui };
+        if (act === 'admin_role') envoi.role = a.dataset.r;
+        if (act === 'admin_email') envoi.email = ($('em') ? $('em').value : '').trim();
+        const res = await appeler(envoi);
+        if (!res.ok) { vueTechniciens(dire(res.erreur), false); return; }
+        let m = 'Compte ' + qui + ' mis à jour.';
+        if (act === 'admin_email') m = res.email ? 'E-mail de ' + qui + ' enregistré.' : 'E-mail de ' + qui + ' effacé.';
+        else if (act === 'admin_role') m = qui + ' est maintenant ' + (res.role === 'admin' ? 'administrateur' : 'technicien') + '.';
+        else if (res.motdepasse) m = 'Mot de passe de ' + qui + ' remis à « ' + res.motdepasse + ' ». Il devra le changer.';
+        if (act !== 'admin_email') ouvert = '';
+        vueTechniciens(m, true);
+        return;
+      }
+      const l = ev.target.closest('button[data-n]'); if (!l) return;
+      ouvert = ouvert === l.dataset.n ? '' : l.dataset.n;
+      vueTechniciens();
+    });
+    $('f-add').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const b = $('b-add'); b.disabled = true; b.textContent = 'Ajout...';
+      const res = await appeler({ action: 'admin_ajouter', nom: $('nn').value,
+                                  motdepasse: $('mp').value, email: $('ne').value.trim(), role: roleNeuf });
+      if (!res.ok) { vueTechniciens(dire(res.erreur), false); return; }
+      ouvert = '';
+      vueTechniciens('Compte ' + res.nom + ' créé comme ' + (res.role === 'admin' ? 'administrateur' : 'technicien') +
+        '. Mot de passe provisoire : « ' + res.motdepasse + ' ».', true);
+    });
+  }
 
   /* ---------- Aiguillage ---------- */
   async function router() {
