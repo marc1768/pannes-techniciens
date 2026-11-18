@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.8';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.9';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -753,7 +753,7 @@
           (admin ? '<button class="ligne-tech" id="b-tech">' +
             '<span class="rond" style="border-radius:12px;background:var(--accent-clair);color:var(--accent-fonce)">' +
               SVG('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>').replace('<svg', '<svg style="width:22px;height:22px"') + '</span>' +
-            '<span style="flex:1;font-size:1rem;font-weight:700">Gérer les techniciens</span>' + CHEVRON + '</button>' : '') +
+            '<span style="flex:1;font-size:1rem;font-weight:700">Gérer les comptes</span>' + CHEVRON + '</button>' : '') +
           '<button class="ligne-tech" id="b-chg">' +
             '<span class="rond" style="border-radius:12px">' + SVG('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>').replace('<svg', '<svg style="width:22px;height:22px"') + '</span>' +
             '<span style="flex:1;font-size:1rem;font-weight:700">Changer mon mot de passe</span>' + CHEVRON + '</button>' +
@@ -796,75 +796,7 @@
 
   /* ---------- Écran : gérer les techniciens (administrateur) ---------- */
   let ouvert = '';
-  async function vueTechniciens(msg, ok) {
-    app().innerHTML =
-      '<div class="page">' +
-        '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
-          '<h2>Techniciens</h2></div>' +
-        '<div class="contenu" id="c"><div class="chargement"><span class="tourne"></span> Chargement...</div></div>' +
-      '</div>';
-    $('b-ret').addEventListener('click', vueCompte);
-    const r = await appeler({ action: 'admin_liste' });
-    if (!r.ok) { $('c').innerHTML = '<div class="msg msg-err">' + ech(dire(r.erreur)) + '</div>'; return; }
-    const lignes = r.utilisateurs.map((u) => {
-      const moi = u.nom === etat.moi.nom;
-      const badge = !u.actif ? '<span class="badge badge-off">Désactivé</span>'
-        : u.provisoire ? '<span class="badge badge-prov">Mdp provisoire</span>'
-        : u.role === 'admin' ? '<span class="badge badge-admin">Admin</span>'
-        : '<span class="badge badge-actif">Actif</span>';
-      const haut = '<span class="rond' + (moi ? ' moi' : '') + '">' + ech(initiale(u.nom)) + '</span>' +
-        '<span style="flex:1;font-size:1rem;font-weight:800">' + ech(u.nom) +
-        (moi ? ' <span style="font-size:.8rem;font-weight:600;color:var(--doux)">· toi</span>' : '') + '</span>' + badge;
-      if (ouvert !== u.nom) {
-        return '<button class="ligne-tech" data-n="' + ech(u.nom) + '">' + haut + (moi ? '' : CHEVRON) + '</button>';
-      }
-      return '<div class="ligne-tech ouvert"><div style="min-height:64px;display:flex;align-items:center;gap:12px">' + haut + '</div>' +
-        '<div class="petits">' +
-          '<button class="pr" data-act="admin_reinitialiser" data-n="' + ech(u.nom) + '">Réinitialiser</button>' +
-          '<button class="sec" data-act="' + (u.actif ? 'admin_desactiver' : 'admin_activer') + '" data-n="' + ech(u.nom) + '">' +
-            (u.actif ? 'Désactiver' : 'Réactiver') + '</button>' +
-          '<button data-act="admin_supprimer" data-n="' + ech(u.nom) + '">Supprimer</button>' +
-        '</div></div>';
-    }).join('');
-    $('c').innerHTML =
-      (msg ? '<div class="msg ' + (ok ? 'msg-ok' : 'msg-err') + '">' + ech(msg) + '</div>' : '') +
-      '<div style="font-size:.82rem;color:var(--doux);padding:0 4px 4px">' + r.utilisateurs.length + ' comptes. Touche un nom pour agir.</div>' +
-      lignes +
-      '<form id="f-add" class="bloc" style="gap:12px;margin-top:8px">' +
-        '<div class="lib">Ajouter un technicien</div>' +
-        '<div class="champ"><label for="nn" class="sr">Nom</label>' +
-          '<input id="nn" type="text" placeholder="DAVID" autocapitalize="characters" spellcheck="false" required style="font-weight:700"></div>' +
-        '<div class="champ"><label for="mp">Mot de passe provisoire</label><input id="mp" type="text" value="123456"></div>' +
-        '<button class="btn btn-principal" type="submit" id="b-add" style="height:50px">Ajouter</button>' +
-      '</form>';
-
-    $('c').addEventListener('click', async (ev) => {
-      const a = ev.target.closest('button[data-act]');
-      if (a) {
-        if (a.dataset.act === 'admin_supprimer' && !confirm('Supprimer définitivement le compte ' + a.dataset.n + ' ?')) return;
-        a.disabled = true;
-        const res = await appeler({ action: a.dataset.act, nom: a.dataset.n });
-        if (!res.ok) { vueTechniciens(dire(res.erreur), false); return; }
-        ouvert = '';
-        let m = 'Compte ' + a.dataset.n + ' mis à jour.';
-        if (res.motdepasse) m = 'Mot de passe de ' + a.dataset.n + ' remis à « ' + res.motdepasse + ' ». Il devra le changer.';
-        vueTechniciens(m, true);
-        return;
-      }
-      const l = ev.target.closest('button[data-n]'); if (!l) return;
-      ouvert = ouvert === l.dataset.n ? '' : l.dataset.n;
-      vueTechniciens();
-    });
-    $('f-add').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const b = $('b-add'); b.disabled = true; b.textContent = 'Ajout...';
-      const nom = $('nn').value, mdp = $('mp').value;
-      const res = await appeler({ action: 'admin_ajouter', nom, motdepasse: mdp });
-      if (!res.ok) { vueTechniciens(dire(res.erreur), false); return; }
-      ouvert = '';
-      vueTechniciens('Compte ' + res.nom + ' créé. Mot de passe provisoire : « ' + res.motdepasse + ' ».', true);
-    });
-  }
+undefined
 
   /* ---------- Aiguillage ---------- */
   async function router() {
