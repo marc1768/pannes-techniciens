@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.6';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.7';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -330,14 +330,14 @@
   /* ---------- Écrans : nouvelle intervention (café, appareil, nature, prendre ou déposer) ---------- */
 
   // Types proposés à la création, dans l'ordre d'AppSheet. Les appareils de jeu sont listés ensuite.
-  const TYPES_CREATION = ['MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'AUTRE', 'RAPPEL'];
+  const TYPES_CREATION = ['PANNE', 'MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'AUTRE', 'RAPPEL'];
   const APPAREILS_JEU = ['MONTANA LUXE II', 'DAYTONA', 'NEVADA', 'ZEUS', 'ARIZONA', 'MK3', 'MK4', 'ACTION PACK',
     'TOP MACHINE', 'GREYHOUND', 'TEXAS', 'KICKER', 'BILLARD', 'FLECHE', 'INDETERMINE'];
   let brouillon = null;
   let listeCafes = null;
 
   function vueNouvelle() {
-    brouillon = { licence: '', cafe: '', ville: '', appareil: '', nature: '' };
+    brouillon = { licence: '', cafe: '', ville: '', type: '', machines: [], appareil: '', nature: '' };
     etapeCafe();
   }
 
@@ -392,47 +392,88 @@
       const c = listeCafes.find((x) => x.licence === b.dataset.l && x.nom === b.dataset.n);
       if (!c) return;
       brouillon.licence = c.licence; brouillon.cafe = c.nom; brouillon.ville = c.ville;
-      etapeAppareil();
+      etapeType();
     });
     dessiner();
     $('q').focus();
   }
 
-  /* --- Étape 2 : l'appareil ou le type --- */
-  function etapeAppareil() {
-    const tuile = (v) => {
-      const c = COULEURS[typeDeValeur(v)] || 'panne';
-      return '<button class="ligne-tech" data-a="' + ech(v) + '">' +
+  /* --- Étape 2a : le type d'intervention --- */
+  function etapeType() {
+    const ligne = (v) => {
+      const c = COULEURS[v] || 'panne';
+      return '<button class="ligne-tech" data-t="' + ech(v) + '">' +
         '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
-          (ICONES[typeDeValeur(v)] || ICONES['PANNE']) + '</span>' +
-        '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(libelleValeur(v)) + '</span>' + CHEVRON + '</button>';
+          (ICONES[v] || ICONES['PANNE']) + '</span>' +
+        '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(LIBELLES[v] || v) + '</span>' + CHEVRON + '</button>';
     };
     app().innerHTML =
-      '<div class="page">' + barreCreation('Quel appareil ?', 2) +
+      '<div class="page">' + barreCreation('Type d’intervention', 2) +
         '<div class="contenu">' +
           '<div class="bloc" style="padding:12px 16px;flex-direction:row;align-items:center;gap:10px">' +
             SVG('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>').replace('<svg', '<svg style="width:20px;height:20px;flex:none;color:var(--doux)"') +
-            '<span style="font-size:.95rem;font-weight:700">' + ech(brouillon.cafe) + '</span>' +
+            '<span style="flex:1;min-width:0;font-size:.95rem;font-weight:700">' + ech(brouillon.cafe) + '</span>' +
             '<span style="font-size:.82rem;color:var(--doux)">' + ech(brouillon.ville) + '</span></div>' +
-          '<div class="lib" style="padding:6px 4px 0;font-size:.8rem;font-weight:700;color:var(--doux)">Type d’intervention</div>' +
-          TYPES_CREATION.map(tuile).join('') +
-          '<div class="lib" style="padding:14px 4px 0;font-size:.8rem;font-weight:700;color:var(--doux)">Appareil de jeu (panne)</div>' +
-          APPAREILS_JEU.map(tuile).join('') +
+          TYPES_CREATION.map(ligne).join('') +
         '</div></div>';
     $('b-ret').addEventListener('click', () => etapeCafe());
     document.querySelector('.contenu').addEventListener('click', (ev) => {
-      const b = ev.target.closest('button[data-a]'); if (!b) return;
-      brouillon.appareil = b.dataset.a;
+      const b = ev.target.closest('button[data-t]'); if (!b) return;
+      brouillon.type = b.dataset.t;
+      brouillon.machines = [];
+      // Seule une panne demande de désigner les machines concernées.
+      if (brouillon.type === 'PANNE') etapeMachines(); else { brouillon.appareil = brouillon.type; etapeNature(); }
+    });
+  }
+
+  /* --- Étape 2b : quelles machines sont en panne (plusieurs possibles) --- */
+  function etapeMachines(msg) {
+    const choisies = brouillon.machines || [];
+    const ligne = (v) => {
+      const pris = choisies.indexOf(v) >= 0;
+      return '<button class="ligne-tech" data-m="' + ech(v) + '"' +
+        (pris ? ' style="border:2px solid var(--panne);background:var(--panne-c)"' : '') + '>' +
+        '<span class="coche' + (pris ? ' prise' : '') + '">' + (pris ? SVG('<path d="M20 6L9 17l-5-5"/>') : '') + '</span>' +
+        '<span style="flex:1;font-size:1rem;font-weight:700">' + ech(v) + '</span></button>';
+    };
+    app().innerHTML =
+      '<div class="page">' + barreCreation('Quelle machine ?', 2) +
+        '<div class="contenu" style="padding-bottom:8px">' +
+          (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
+          '<div style="font-size:.85rem;color:var(--doux);padding:0 4px;line-height:1.45">' +
+            'Touche toutes les machines en panne. Tu peux en choisir plusieurs.</div>' +
+          APPAREILS_JEU.map(ligne).join('') +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="btn btn-principal" id="b-ok"' + (choisies.length ? '' : ' disabled') + '>' +
+            (choisies.length ? 'Continuer avec ' + choisies.length + ' machine' + (choisies.length > 1 ? 's' : '') : 'Choisis au moins une machine') +
+          '</button>' +
+        '</div></div>';
+    $('b-ret').addEventListener('click', () => etapeType());
+    document.querySelector('.contenu').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-m]'); if (!b) return;
+      const v = b.dataset.m, i = choisies.indexOf(v);
+      if (i >= 0) choisies.splice(i, 1); else choisies.push(v);
+      brouillon.machines = choisies;
+      etapeMachines();
+    });
+    $('b-ok').addEventListener('click', () => {
+      if (!brouillon.machines.length) return;
+      brouillon.appareil = brouillon.machines.join(' , ');
       etapeNature();
     });
   }
-  // Pour l'affichage seulement : un appareil de jeu est une panne.
-  function typeDeValeur(v) { return TYPES_CREATION.indexOf(v) >= 0 ? v : 'PANNE'; }
-  function libelleValeur(v) { return TYPES_CREATION.indexOf(v) >= 0 ? (LIBELLES[v] || v) : v; }
+
+  // Affichage : le type choisi, et le détail (machines pour une panne).
+  function typeDeValeur() { return brouillon.type || 'PANNE'; }
+  function libelleValeur() {
+    if (brouillon.type === 'PANNE') return (brouillon.machines || []).join(' , ') || 'Panne';
+    return LIBELLES[brouillon.type] || brouillon.type;
+  }
 
   /* --- Étape 3 : la nature de la panne --- */
   function etapeNature(msg) {
-    const t = typeDeValeur(brouillon.appareil), c = COULEURS[t] || 'panne';
+    const t = typeDeValeur(), c = COULEURS[t] || 'panne';
     app().innerHTML =
       '<div class="page">' + barreCreation('Que se passe-t-il ?', 3) +
         '<form id="f" class="contenu">' +
@@ -441,12 +482,12 @@
             '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
               (ICONES[t] || ICONES['PANNE']) + '</span>' +
             '<span style="flex:1;min-width:0"><span style="display:block;font-size:1rem;font-weight:700">' + ech(brouillon.cafe) + '</span>' +
-            '<span style="display:block;font-size:.82rem;color:var(--doux)">' + ech(libelleValeur(brouillon.appareil)) + ' · ' + ech(brouillon.ville) + '</span></span></div>' +
+            '<span style="display:block;font-size:.82rem;color:var(--doux)">' + ech(libelleValeur()) + ' · ' + ech(brouillon.ville) + '</span></span></div>' +
           '<div class="champ"><label for="n">Nature de la panne</label>' +
             '<textarea id="n" rows="5" placeholder="Décris le problème en quelques mots">' + ech(brouillon.nature) + '</textarea></div>' +
           '<button class="btn btn-principal" type="submit">Continuer</button>' +
         '</form></div>';
-    $('b-ret').addEventListener('click', () => etapeAppareil());
+    $('b-ret').addEventListener('click', () => brouillon.type === 'PANNE' ? etapeMachines() : etapeType());
     $('f').addEventListener('submit', (ev) => {
       ev.preventDefault();
       const n = $('n').value.trim();
@@ -458,7 +499,7 @@
 
   /* --- Étape 4 : je la prends ou je la dépose --- */
   function etapeChoix(msg) {
-    const t = typeDeValeur(brouillon.appareil), c = COULEURS[t] || 'panne';
+    const t = typeDeValeur(), c = COULEURS[t] || 'panne';
     app().innerHTML =
       '<div class="page">' + barreCreation('Tu la prends ?', 4) +
         '<div class="contenu">' +
@@ -470,7 +511,7 @@
                 '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
                   (ICONES[t] || ICONES['PANNE']) + '</span>' +
                 '<span class="carte-titres"><span class="nom">' + ech(brouillon.cafe) + '</span>' +
-                '<span class="sous">' + ech(brouillon.ville) + ' · ' + ech(libelleValeur(brouillon.appareil)) + '</span></span></div>' +
+                '<span class="sous">' + ech(brouillon.ville) + ' · ' + ech(libelleValeur()) + '</span></span></div>' +
               '<div class="nature">' + ech(brouillon.nature) + '</div>' +
             '</div></div>' +
         '</div>' +
