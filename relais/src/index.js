@@ -38,6 +38,7 @@ const BLOCAGE_MS = 600 * 1000;
 const JETON_LONG_MS = 365 * 86400 * 1000;
 const JETON_COURT_MS = 12 * 3600 * 1000;
 const LIGNES_LISTE = 500;
+const CACHE_DETAILS_MS = 60 * 1000;   // le détail change à chaque vente : cache court
 const CACHE_PLACES_MS = 600 * 1000;      // liste des cafés : 10 minutes
 // Titre de la notification Pushover selon le type, comme la PWA d'encodage.
 const TITRES = { 'MACHINE A CAFE': 'Machine à café', 'ENTRETIEN': 'Nouvel entretien',
@@ -429,6 +430,17 @@ export class Relais extends DurableObject {
         if (p.licence && p.telephone) annuaire.set(p.licence.toUpperCase(), p.telephone);
       });
       interventions.forEach((i) => { i.telephone = annuaire.get(txt(i.licence).toUpperCase()) || ''; });
+    // Produits à charger, pour les livraisons Horeca venues d'une vente au comptoir.
+    try {
+      if (interventions.some((i) => i.type === 'LIVRAISON HORECA')) {
+        const parTicket = await this.lireDetails();
+        interventions.forEach((i) => {
+          if (i.type !== 'LIVRAISON HORECA') return;
+          const t = ticketDe(i.nature);
+          if (t && parTicket.has(t)) { i.ticket = t; i.produits = parTicket.get(t); }
+          else if (t) i.ticket = t;
+        });
+      }
     } catch (e) { /* confort : son absence ne bloque pas la liste */ }
     return { ok: true, interventions, maintenant: serieBruxelles(new Date()) };
   }
@@ -531,6 +543,28 @@ export class Relais extends DurableObject {
   /* ---------- Cafés (onglet « places », cache 10 minutes) ---------- */
 
   // Colonnes de l'onglet « places » : A licence, B nom, C adresse, D code postal, E ville, G société.
+  // Produits d'une livraison Horeca, lus dans l'onglet « Détails livraisons » (Id, Ticket, Produit, Quantité).
+  // Lecture seule : c'est le relais d'encodage qui efface ces lignes à la clôture, jamais celui-ci.
+  async lireDetails() {
+    if (this.details && Date.now() - this.details.t < CACHE_DETAILS_MS) return this.details.parTicket;
+    const onglet = this.env.ONGLET_DETAILS || 'Détails livraisons';
+    const parTicket = new Map();
+    try {
+      const r = await this.sheets('/values/' + encodeURIComponent("'" + onglet.replace(/'/g, "''") + "'!A:D") +
+        '?valueRenderOption=UNFORMATTED_VALUE&majorDimension=ROWS', { method: 'GET' });
+      const lignes = r.values || [];
+      for (let i = 1; i < lignes.length; i++) {
+        const l = lignes[i];
+        const ticket = txt(l[1]), produit = txt(l[2]);
+        if (!ticket || !produit) continue;
+        if (!parTicket.has(ticket)) parTicket.set(ticket, []);
+        parTicket.get(ticket).push({ produit, quantite: txt(l[3]) });
+      }
+    } catch (e) { /* l'onglet peut manquer : la livraison s'affiche alors sans son détail */ }
+    this.details = { t: Date.now(), parTicket };
+    return parTicket;
+  }
+
   async lirePlaces() {
     if (this.places && Date.now() - this.places.t < CACHE_PLACES_MS) return this.places.liste;
     const onglet = this.env.ONGLET_PLACES || 'places';
@@ -665,6 +699,13 @@ export class Relais extends DurableObject {
 
 // Adresse e-mail d'un compte : sert à lui envoyer son invitation.
 // Une adresse qui ne ressemble à rien est refusée plutôt qu'enregistrée de travers.
+// Numéro de ticket d'une livraison Horeca, tel qu'il est écrit dans « Nature de la panne » :
+// « Livraison Horeca – ticket 2630-2-000024 ». C'est lui qui relie la ligne à l'onglet du détail.
+function ticketDe(nature) {
+  const m = /ticket\s+([0-9][0-9A-Za-z-]*)/i.exec(txt(nature));
+  return m ? m[1] : '';
+}
+
 function courriel(v) {
   const s = String(v === undefined || v === null ? '' : v).trim();
   if (!s || s.length > 160) return '';
