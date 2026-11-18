@@ -534,8 +534,12 @@ export class Relais extends DurableObject {
     if (!pos) return { ok: false, erreur: 'colonne_manquante' };
     const cafe = await this.trouverCafe(req.licence, req.cafe);
     if (!cafe) return { ok: false, erreur: 'cafe_inconnu' };
-    const appareil = txt(req.appareil).toUpperCase();
-    if (!APPAREILS.includes(appareil)) return { ok: false, erreur: 'appareil_invalide' };
+    // Un ou plusieurs appareils, au format d'AppSheet : « FLIPPER , BILLARD ».
+    // Chaque valeur doit figurer telle quelle dans la liste officielle, sinon l'écran et AppSheet
+    // ne retrouveraient plus l'intervention.
+    const choisis = listeValeurs(req.appareil).map((x) => x.toUpperCase());
+    if (!choisis.length || choisis.some((x) => !APPAREILS.includes(x))) return { ok: false, erreur: 'appareil_invalide' };
+    const appareil = joindre(choisis);
     const nature = nettoyer(req.nature, 500);
     const prendre = !!req.prendre;
 
