@@ -5,6 +5,7 @@
 (() => {
   'use strict';
 
+  const VERSION_APPLI = 'Version 1.6';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -161,7 +162,7 @@
           '</div>' +
           '<div style="text-align:center;font-size:.88rem;color:var(--doux);padding:0 12px;line-height:1.45">Mot de passe perdu ? Préviens Marc, il le réinitialise.</div>' +
         '</form>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">Version 1.5</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:18px 0 28px">' + VERSION_APPLI + '</div>' +
       '</div>';
     $('voir').addEventListener('click', () => {
       const c = $('mdp'); c.type = c.type === 'password' ? 'text' : 'password';
@@ -700,7 +701,7 @@
           '<button class="btn btn-rouge" id="b-out" style="margin-top:8px">' +
             SVG('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>') + 'Se déconnecter</button>' +
         '</div>' +
-        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:14px 0 28px">Version 1.1</div>' +
+        '<div style="text-align:center;font-size:.72rem;color:var(--doux);padding:14px 0 28px">' + VERSION_APPLI + '</div>' +
       '</div>';
     $('b-ret').addEventListener('click', () => { vueListe(); chargerListe(); });
     $('b-chg').addEventListener('click', () => vueChangerMdp());

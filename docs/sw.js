@@ -1,7 +1,7 @@
 // Service worker — PWA Techniciens
 // Met en cache UNIQUEMENT les fichiers de l'interface (même origine).
 // Les appels au relais Cloudflare ne sont JAMAIS interceptés ni mis en cache.
-const VERSION = 'techniciens-v7';
+const VERSION = 'techniciens-v8';
 const FICHIERS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
