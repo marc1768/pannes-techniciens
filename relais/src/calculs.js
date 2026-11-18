@@ -14,6 +14,16 @@ export const STATUTS_ACTIFS = { 'En attente': true, 'En cours': true };
 
 export function txt(v) { return String(v === undefined || v === null ? '' : v).trim(); }
 
+// Numéro de téléphone venu de la feuille. Google renvoie les valeurs brutes : un numéro tapé
+// sans apostrophe devient un nombre et perd son zéro de tête, 0475… arrivant en 475….
+// On le remet quand le numéro n'est fait que de chiffres et ne commence pas déjà par 0.
+export function telephone(v) {
+  const s = txt(v);
+  if (!s) return '';
+  if (/^[0-9]+$/.test(s) && s[0] !== '0') return '0' + s;
+  return s;
+}
+
 // Colonnes à valeurs multiples (EnumList) : « DAVID , JULIEN » -> ['DAVID', 'JULIEN'].
 export function listeValeurs(v) {
   return txt(v).split(',').map((s) => s.trim()).filter(Boolean);

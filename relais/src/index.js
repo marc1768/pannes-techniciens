@@ -25,7 +25,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import {
-  APPAREILS, STATUTS_ACTIFS, txt, listeValeurs, joindre, nettoyer, typeDe, priorite, reserveLe, livraisonLe,
+  APPAREILS, STATUTS_ACTIFS, txt, telephone, listeValeurs, joindre, nettoyer, typeDe, priorite, reserveLe, livraisonLe,
   encaisser, natureCourte, consigne, ticketLiv, colonne, serieBruxelles, isoDepuisSerie, FORMAT_DATE_HEURE,
   FORMAT_DUREE, dureeSerie, texteBruxelles, fenetreNotification
 } from './calculs.js';
@@ -523,7 +523,7 @@ export class Relais extends DurableObject {
       if (!l[0] || !l[1]) continue;
       liste.push({ licence: txt(l[0]), nom: txt(l[1]), adresse: txt(l[2]),
                    cp: l[3] === undefined ? '' : l[3], ville: txt(l[4]), societe: txt(l[6]) || 'Dongiovanni',
-                   telephone: txt(l[11]) });
+                   telephone: telephone(l[11]) });
     }
     this.places = { t: Date.now(), liste };
     return liste;
