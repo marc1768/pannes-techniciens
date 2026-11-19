@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.14';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.15';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -230,33 +230,36 @@
   }
 
   /* ---------- Écran : liste des interventions ---------- */
+  // Ligne compacte du tableau (style « dispatch ») : barre de couleur du type, temps à gauche,
+  // nom et détail au centre, statut et technicien à droite.
   function carteHtml(i) {
     const c = COULEURS[i.type] || 'panne';
     const estRappel = i.type === 'RAPPEL';
-    let etiq = '';
-    if (i.statut === 'En cours') {
-      etiq = '<span class="etiq etiq-cours">En cours · ' + ech(i.techniciens.join(' , ') || '?') + '</span>';
-    } else if (i.reservePar) {
-      etiq = '<span class="etiq etiq-reserve">Réservé ' + ech(i.reservePar) + '</span>';
-    } else {
-      const d = depuis(i.horodateurTexte, etat.maintenant);
-      etiq = '<span class="etiq etiq-attente">En attente' + (d ? ' · ' + d : '') + '</span>';
-    }
+    const enCours = i.statut === 'En cours';
+    const d = depuis(enCours && i.debut ? i.debut : i.horodateurTexte, etat.maintenant) || '';
+    const [tVal, tUnite] = d ? d.split(' ') : ['—', ''];
+    let st = 'st-attente', stTxt = 'En attente', qui = '';
+    if (estRappel) { st = 'st-rappel'; stTxt = 'À faire'; }
+    else if (enCours) { st = 'st-cours'; stTxt = 'En cours'; qui = i.techniciens.join(' , '); }
+    else if (i.reservePar) { st = 'st-reserve'; stTxt = 'Réservée'; qui = i.reservePar; }
+    if (!qui && i.livraisonLe) qui = i.livraisonLe.replace(/^Livraison\s*:\s*/i, '');
+    const retard = /RETARD/i.test(qui);
     const titre = estRappel ? 'Alerte' : ech(i.cafe);
-    const sous = estRappel ? 'Rappel' : ech([i.ville, i.appareil].filter(Boolean).join(' · '));
-    const texte = ech(i.encaisser || i.natureCourte || i.nature);
-    return '<button class="carte" data-h="' + i.horodateur + '" data-l="' + i.ligne + '">' +
-      '<div class="liseret" style="background:var(--' + c + ')"></div>' +
-      '<div class="carte-corps">' +
-        '<div class="carte-haut">' +
-          '<span class="tuile" style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' + (ICONES[i.type] || ICONES['PANNE']) + '</span>' +
-          '<span class="carte-titres"><span class="nom">' + titre + '</span><span class="sous">' + sous + '</span></span>' +
-        '</div>' +
-        '<div class="etiqs">' + etiq + '</div>' +
-        (texte ? '<div class="nature' + (estRappel ? ' rappel' : '') + '">' + texte + '</div>' : '') +
-        (i.livraisonLe ? '<div class="info-liv">' + ech(i.livraisonLe) + '</div>' : '') +
-      '</div></button>';
+    const detail = estRappel ? ech(i.nature || 'Rappel')
+      : ech([i.ville, i.appareil && i.appareil !== i.type ? i.appareil : '', i.encaisser || i.natureCourte || i.nature].filter(Boolean).join(' · '));
+    return '<button class="ligne" data-h="' + i.horodateur + '" data-l="' + i.ligne + '">' +
+      '<span class="ligne-barre" style="background:var(--' + c + ')"></span>' +
+      '<span class="ligne-temps"><b class="mono">' + ech(tVal) + '</b><small>' + ech(tUnite) + '</small></span>' +
+      '<span class="ligne-centre">' +
+        '<span class="ligne-titre"><span class="ligne-ico" style="color:var(--' + c + '-f)">' + (ICONES[i.type] || ICONES['PANNE']) + '</span>' +
+          '<span class="ligne-nom">' + titre + '</span></span>' +
+        '<span class="ligne-detail' + (estRappel ? ' rappel' : '') + (i.encaisser ? ' encaisser' : '') + '">' + detail + '</span>' +
+      '</span>' +
+      '<span class="ligne-droite"><span class="statut ' + st + '">' + stTxt + '</span>' +
+        (qui ? '<span class="ligne-qui mono' + (retard ? ' retard' : '') + '">' + ech(qui) + '</span>' : '') + '</span>' +
+    '</button>';
   }
+
 
   function vueListe() {
     const parType = {};
@@ -264,9 +267,9 @@
     const types = ORDRE_TYPES;                       // toujours tous les types, même à 0
     const compteurs = types.map((t) => {
       const c = COULEURS[t];
-      return '<button data-type="' + t + '" aria-pressed="' + (etat.filtreType === t) + '" aria-label="' + (parType[t] || 0) + ' ' + ech(LIBELLES[t]) + '" ' +
-        'style="background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
-        (ICONES[t] || '') + '<b>' + (parType[t] || 0) + '</b></button>';
+      return '<button data-type="' + t + '" aria-pressed="' + (etat.filtreType === t) + '" aria-label="' + (parType[t] || 0) + ' ' + ech(LIBELLES[t]) + '"' +
+        (parType[t] ? '' : ' class="zero"') + ' style="color:var(--' + c + '-l)">' +
+        (ICONES[t] || '') + '<b class="mono">' + (parType[t] || 0) + '</b></button>';
     }).join('');
 
     let liste = etat.interventions;
@@ -275,12 +278,12 @@
     if (etat.filtreStatut === 'cours') liste = liste.filter((i) => i.statut === 'En cours');
     if (etat.filtreStatut === 'moi') liste = liste.filter((i) => i.techniciens.includes(etat.moi.nom) || i.reservePar === etat.moi.nom);
 
-    const jour = new Date().toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' });
+    const jour = new Date().toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: '2-digit' });
     app().innerHTML =
       '<header>' +
         '<div class="titre-ligne">' +
-          '<div><h1>Interventions</h1><div class="sous">' + ech(jour.charAt(0).toUpperCase() + jour.slice(1)) + ' · ' +
-            etat.interventions.length + ' à traiter</div></div>' +
+          '<div><div class="sous">Interventions · ' + ech(jour) + '</div><h1>' +
+            etat.interventions.length + ' à traiter</h1></div>' +
           '<button class="btn-actu' + (etat.chargement ? ' occupe' : '') + '" id="b-actu" aria-label="Actualiser">' +
             SVG('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>') + '</button>' +
           '<button class="btn-compte" id="b-compte"><span class="pastille">' + ech(initiale(etat.moi.nom)) + '</span>' + ech(etat.moi.nom) + '</button>' +
@@ -293,7 +296,7 @@
           '<button data-s="moi" aria-pressed="' + (etat.filtreStatut === 'moi') + '">Les miennes</button>' +
         '</div>' +
       '</header>' +
-      '<main id="liste">' +
+      '<main id="liste" class="tableau">' +
         (etat.erreur ? '<div class="msg msg-err">' + ech(etat.erreur) + '</div>' : '') +
         (etat.chargement && !etat.interventions.length ? '<div class="chargement"><span class="tourne"></span> Chargement...</div>' :
           liste.length ? liste.map(carteHtml).join('') :
@@ -316,7 +319,7 @@
       etat.filtreStatut = b.dataset.s; vueListe();
     });
     $('liste').addEventListener('click', (ev) => {
-      const b = ev.target.closest('.carte'); if (!b) return;
+      const b = ev.target.closest('.ligne'); if (!b) return;
       const i = etat.interventions.find((x) => String(x.horodateur) === b.dataset.h);
       if (i) vueDetail(i);
     });
@@ -608,17 +611,29 @@
       if (i.reserveLe) etiqs += '<span class="etiq etiq-reserve">' + ech(i.reserveLe) + '</span>';
     }
     const h = heureDe(i.horodateurTexte);
-    if (h) etiqs += '<span class="etiq" style="background:var(--carte);border:1px solid var(--bord)">Ajoutée à ' + h + '</span>';
+    const dAtt = depuis(i.horodateurTexte, etat.maintenant);
+    let stCls = 'st-attente', stTxt = 'En attente' + (dAtt ? ' · ' + dAtt : '');
+    if (estRappel) { stCls = 'st-rappel'; stTxt = 'À faire'; }
+    else if (i.statut === 'En cours') { stCls = 'st-cours'; stTxt = 'En cours'; }
+    else if (i.reservePar) { stCls = 'st-reserve'; stTxt = 'Réservée'; }
+    const info = (lib, val, cls) => '<div class="info-ligne' + (cls ? ' ' + cls : '') + '"><span>' + lib + '</span><b>' + val + '</b></div>';
+    const infos =
+      (i.statut === 'En cours' ? info('Technicien', ech(i.techniciens.join(' , ') || '?')) : '') +
+      (i.reservePar ? info('Réservée par', ech(i.reservePar)) : '') +
+      (i.livraisonLe ? info('Livraison', ech(i.livraisonLe.replace(/^Livraison\s*:\s*/i, '')), /RETARD/i.test(i.livraisonLe) ? 'rouge' : '') : '') +
+      (i.encaisser ? info('À encaisser', '<span class="mono">' + ech(i.encaisser.replace(/^À\s*ENCAISSER\s*/i, '')) + '</span>', 'rouge') : '') +
+      (h ? info('Ajoutée', '<span class="mono">' + h + '</span>' + (dAtt ? ' · il y a ' + dAtt : '')) : '') +
+      (i.debut ? info('Début', '<span class="mono">' + ech(i.debut.replace('T', ' à ').slice(0, 19)) + '</span>') : '');
 
     let boutons = '';
     if (estRappel) {
       boutons = '<button class="btn btn-prendre" data-a="fait">Marquer comme fait</button>';
     } else if (i.statut === 'En attente') {
-      boutons = '<button class="btn btn-prendre" data-a="prendre">Prendre cette intervention</button>' +
-        '<div class="deux">' +
+      boutons = '<div class="deux">' +
+          '<button class="btn btn-prendre" data-a="prendre">Prendre</button>' +
           (i.reservePar === etat.moi.nom
             ? '<button class="btn btn-second" data-a="liberer">Libérer</button>'
-            : (i.reservePar ? '' : '<button class="btn btn-reserver" data-a="reserver">Réserver pour moi</button>')) +
+            : (i.reservePar ? '' : '<button class="btn btn-reserver" data-a="reserver">Réserver</button>')) +
         '</div>';
     } else if (i.statut === 'En cours') {
       boutons = (aMoi
@@ -628,29 +643,25 @@
           ech(i.techniciens.concat([etat.moi.nom]).join(' , ')) + '</div>');
     }
     // Administrateurs : accès à la page de modification et de suppression.
-    if (etat.moi && etat.moi.role === 'admin') boutons += '<button class="btn btn-second" data-a="admin">Modifier ou supprimer (admin)</button>';
+    if (etat.moi && etat.moi.role === 'admin') boutons += '<button class="btn btn-second petit" data-a="admin">Modifier ou supprimer (admin)</button>';
 
     app().innerHTML =
       '<div class="page">' +
-        '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour à la liste">' + FLECHE + '</button>' +
-          '<span style="font-size:.95rem;font-weight:600;color:var(--doux)">Intervention</span></div>' +
-        '<div style="padding:8px 20px 18px;display:flex;flex-direction:column;gap:14px">' +
-          '<div style="display:flex;align-items:center;gap:14px">' +
-            '<span class="tuile" style="width:56px;height:56px;border-radius:18px;background:var(--' + c + '-c);border-color:var(--' + c + ');color:var(--' + c + '-f)">' +
-              (ICONES[i.type] || '').replace('<svg', '<svg style="width:30px;height:30px"') + '</span>' +
-            '<div><div style="font-weight:800;font-size:1.45rem;letter-spacing:-.02em">' + ech(estRappel ? 'Alerte' : i.cafe) + '</div>' +
-              '<div style="font-size:.88rem;color:var(--doux);margin-top:2px">' + ech(LIBELLES[i.type] + (i.appareil && !estRappel ? ' · ' + i.appareil : '')) + '</div></div>' +
-          '</div>' +
-          '<div style="display:flex;gap:8px;flex-wrap:wrap">' + etiqs + '</div>' +
+        '<div class="det-entete" style="border-bottom-color:var(--' + c + ')">' +
+          '<div class="det-haut"><button class="btn-retour" id="b-ret" aria-label="Retour à la liste">' + FLECHE + '</button>' +
+            '<span class="det-ref mono">' + ech(i.ticket ? '#' + i.ticket : (h ? 'Ajoutée ' + h : '')) + '</span>' +
+            '<span class="statut ' + stCls + '">' + ech(stTxt) + '</span></div>' +
+          '<div class="det-titre"><span class="det-ico" style="color:var(--' + c + '-l)">' + (ICONES[i.type] || '') + '</span>' +
+            '<h1>' + ech(estRappel ? 'Alerte' : i.cafe) + '</h1></div>' +
+          '<div class="det-sous">' + ech([LIBELLES[i.type], i.ville, i.appareil && i.appareil !== i.type && !estRappel ? i.appareil : ''].filter(Boolean).join(' · ')) + '</div>' +
         '</div>' +
-        '<div class="contenu" style="padding-top:0">' +
+        '<div class="contenu">' +
           (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
-          // « À ENCAISSER » a déjà son bandeau : on ne le répète pas dans le texte.
-          (i.nature ? '<div class="bloc"><div class="lib">Problème signalé</div><div class="val">' +
+          (infos ? '<div class="infos">' + infos + '</div>' : '') +
+          // « À ENCAISSER » est déjà dans le tableau : on ne le répète pas dans le texte.
+          (i.nature ? '<div class="bloc"><div class="lib">' + (estRappel ? 'Consigne' : 'Problème signalé') + '</div><div class="val">' +
             ech(i.encaisser ? i.nature.replace(/\s*[–—-]?\s*À\s*ENCAISSER.*$/i, '') : i.nature) + '</div></div>' : '') +
-          (i.encaisser ? '<div class="msg msg-info">' + ech(i.encaisser) + '</div>' : '') +
           (i.consigne ? '<div class="msg msg-info">' + ech(i.consigne) + '</div>' : '') +
-          (i.livraisonLe ? '<div class="bloc"><div class="lib">Livraison</div><div class="val">' + ech(i.livraisonLe.replace(/^Livraison\s*:\s*/i, '')) + '</div></div>' : '') +
           // Produits à charger (livraison Horeca venue d'une vente au comptoir), fournis par le relais.
           (i.produits && i.produits.length ?
             '<div class="bloc"><div class="lib">Produits à charger' + (i.ticket ? ' · ticket ' + ech(i.ticket) : '') + '</div>' +
@@ -686,7 +697,6 @@
               '<a class="it-waze" href="https://www.waze.com/ul?q=' + encodeURIComponent(adresse) + '&navigate=yes" target="_blank" rel="noopener">' +
                 SVG('<circle cx="12" cy="11" r="8"/><path d="M9 10h.01M15 10h.01M9 14.5a4 4 0 0 0 6 0"/>') + 'Waze</a>' +
             '</div>') +
-          (i.debut ? '<div class="bloc"><div class="lib">Début</div><div class="val">' + ech(i.debut.replace('T', ' à ')) + '</div></div>' : '') +
         '</div>' +
         (boutons ? '<div class="actions" id="act">' + boutons + '</div>' : '') +
       '</div>';
