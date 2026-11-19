@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.13';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.14';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -68,6 +68,8 @@
     signature_non_configuree: 'L’enregistrement des signatures n’est pas configuré.',
     piece_inconnue: 'Pièce inconnue : elle n’est plus dans le catalogue.',
     quantite_invalide: 'Quantité invalide (1 à 99).',
+    rien_a_modifier: 'Aucune modification.',
+    cafe_inconnu: 'Établissement introuvable dans la liste.',
     compte_desactive: 'Ce compte est désactivé.',
     mail_non_configure: 'L’envoi des mails n’est pas encore configuré.',
     mail_echec: 'Le mail n’a pas pu partir. Réessaie dans un moment.',
@@ -625,6 +627,8 @@
         (aMoi ? '' : '<div style="text-align:center;font-size:.82rem;color:var(--doux)">Ton nom sera ajouté : ' +
           ech(i.techniciens.concat([etat.moi.nom]).join(' , ')) + '</div>');
     }
+    // Administrateurs : accès à la page de modification et de suppression.
+    if (etat.moi && etat.moi.role === 'admin') boutons += '<button class="btn btn-second" data-a="admin">Modifier ou supprimer (admin)</button>';
 
     app().innerHTML =
       '<div class="page">' +
@@ -692,6 +696,7 @@
     if (act) act.addEventListener('click', async (ev) => {
       const b = ev.target.closest('button[data-a]'); if (!b) return;
       if (b.dataset.a === 'cloture') { vueCloture(i); return; }
+      if (b.dataset.a === 'admin') { adm = null; vueAdmin(i); return; }
       if (etat.enCours) return;
       etat.enCours = true;
       const avant = b.textContent; b.disabled = true; b.textContent = 'En cours...';
@@ -841,6 +846,104 @@
         vueCloture(i, dire(r.erreur)); return;
       }
       clo = null;
+      await chargerListeSilencieuse();
+      vueListe();
+    });
+  }
+
+  /* ---------- Écran administrateur : modifier ou supprimer une intervention ---------- */
+  // Café, appareils, description ; « En cours » peut être remis « En attente » (technicien retiré). Pas d'historique.
+  const APPAREILS_ADMIN = ['MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'AUTRE', 'RAPPEL'].concat(APPAREILS_JEU);
+  let adm = null;
+
+  function cafesTrouves(q) {
+    const t = (q || '').trim().toUpperCase();
+    if (!t || !listeCafes) return [];
+    return listeCafes.filter((x) => (x.nom + ' ' + x.ville + ' ' + x.licence).toUpperCase().indexOf(t) >= 0).slice(0, 8);
+  }
+
+  function vueAdmin(i, msg) {
+    if (!adm || adm.horodateur !== i.horodateur) {
+      adm = { horodateur: i.horodateur, nature: i.nature || '', cafe: null, q: '', attente: false,
+        appareils: (i.appareil || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean) };
+    }
+    const appareilsDepart = (i.appareil || '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean).join(' , ');
+    const garder = () => { const n = $('an'); if (n) adm.nature = n.value; };
+    const puce = (v) => '<button type="button" class="puce-m' + (adm.appareils.indexOf(v) >= 0 ? ' prise' : '') + '" data-ap="' + ech(v) + '">' + ech(v) + '</button>';
+    const cafeAff = adm.cafe ? adm.cafe.nom + ' · ' + adm.cafe.ville + ' (' + adm.cafe.licence + ')' : (i.cafe + (i.ville ? ' · ' + i.ville : ''));
+    app().innerHTML =
+      '<div class="page">' +
+        '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
+          '<div><h2>Modifier l’intervention</h2>' +
+          '<div style="font-size:.82rem;color:var(--doux)">Administrateur · ' + ech(i.statut) +
+            (i.techniciens.length ? ' · ' + ech(i.techniciens.join(' , ')) : '') + '</div></div></div>' +
+        '<div class="contenu" id="ac">' +
+          (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
+          '<div class="bloc" style="gap:10px"><div class="lib">Établissement</div>' +
+            '<div style="font-weight:700">' + ech(cafeAff) + (adm.cafe ? ' <span style="color:var(--accent);font-size:.8rem">(nouveau)</span>' : '') + '</div>' +
+            '<input id="aq" type="search" placeholder="Changer : chercher un nom ou une ville" autocomplete="off" spellcheck="false" ' +
+              'style="height:48px;border-radius:12px;border:1px solid var(--bord);background:var(--doux2);padding:0 12px;font-size:1rem">' +
+            '<div id="ares" style="display:flex;flex-direction:column;gap:6px"></div></div>' +
+          '<div class="bloc" style="gap:10px"><div class="lib">Type et appareils</div>' +
+            '<div class="puces-m">' + APPAREILS_ADMIN.map(puce).join('') + '</div></div>' +
+          '<div class="bloc"><div class="champ"><label for="an">Description</label>' +
+            '<textarea id="an" rows="4">' + ech(adm.nature) + '</textarea></div></div>' +
+          (i.statut === 'En cours' ?
+            '<button type="button" id="aatt" class="bloc" style="flex-direction:row;align-items:center;gap:12px;text-align:left;width:100%">' +
+              '<span class="coche' + (adm.attente ? ' prise' : '') + '">' + (adm.attente ? SVG('<path d="M20 6L9 17l-5-5"/>') : '') + '</span>' +
+              '<span style="flex:1;font-size:.95rem">Remettre <b>en attente</b> et retirer le technicien (' + ech(i.techniciens.join(' , ')) + ')</span></button>' : '') +
+          '<button class="btn btn-principal" type="button" id="a-ok">Enregistrer les modifications</button>' +
+          '<button class="btn btn-rouge" type="button" id="a-sup" style="margin-top:6px">Supprimer l’intervention</button>' +
+        '</div>' +
+      '</div>';
+
+    // Recherche d'un autre établissement : seule la liste des résultats est redessinée (le clavier reste ouvert).
+    const dessinerResultats = () => {
+      $('ares').innerHTML = cafesTrouves($('aq').value).map((x, k) =>
+        '<button type="button" class="ligne-tech" data-cafe="' + k + '" style="min-height:52px">' +
+          '<span style="flex:1"><span style="display:block;font-weight:700">' + ech(x.nom) + '</span>' +
+          '<span style="display:block;font-size:.78rem;color:var(--doux)">' + ech(x.ville + ' · ' + x.licence) + '</span></span></button>').join('');
+    };
+    $('b-ret').addEventListener('click', () => { adm = null; vueDetail(i); });
+    $('aq').addEventListener('input', async () => {
+      if (!listeCafes) { const r = await appeler({ action: 'cafes' }); if (r.ok) listeCafes = r.cafes; }
+      dessinerResultats();
+    });
+    $('ac').addEventListener('click', (ev) => {
+      const c = ev.target.closest('button[data-cafe]');
+      if (c) { garder(); adm.cafe = cafesTrouves($('aq').value)[Number(c.dataset.cafe)] || null; vueAdmin(i); return; }
+      const a = ev.target.closest('button[data-ap]');
+      if (a) {
+        garder();
+        const v = a.dataset.ap, k = adm.appareils.indexOf(v);
+        if (k >= 0) adm.appareils.splice(k, 1); else adm.appareils.push(v);
+        vueAdmin(i); return;
+      }
+      if (ev.target.closest('#aatt')) { garder(); adm.attente = !adm.attente; vueAdmin(i); }
+    });
+    $('a-ok').addEventListener('click', async () => {
+      garder();
+      if (!adm.appareils.length) { vueAdmin(i, 'Choisis au moins un type ou un appareil.'); return; }
+      const corps = { action: 'admin_modifier', horodateur: i.horodateur, ligne: i.ligne };
+      if (adm.nature !== (i.nature || '')) corps.nature = adm.nature;
+      if (adm.appareils.join(' , ') !== appareilsDepart) corps.appareils = adm.appareils;
+      if (adm.cafe) { corps.licence = adm.cafe.licence; corps.cafe = adm.cafe.nom; }
+      if (adm.attente) corps.remettreEnAttente = true;
+      if (Object.keys(corps).length === 3) { vueAdmin(i, 'Aucune modification.'); return; }
+      const b = $('a-ok'); b.disabled = true; b.textContent = 'Enregistrement...';
+      const r = await appeler(corps);
+      if (!r.ok) { if (r.erreur === 'session_invalide') { router(); return; } vueAdmin(i, dire(r.erreur)); return; }
+      adm = null;
+      await chargerListeSilencieuse();
+      const maj = etat.interventions.find((x) => Math.abs(x.horodateur - i.horodateur) < 1e-6);
+      if (maj) vueDetail(maj); else vueListe();
+    });
+    $('a-sup').addEventListener('click', async () => {
+      if (!confirm('Supprimer définitivement cette intervention (' + i.cafe + ') ? Elle disparaîtra aussi d’AppSheet.')) return;
+      const b = $('a-sup'); b.disabled = true; b.textContent = 'Suppression...';
+      const r = await appeler({ action: 'admin_effacer', horodateur: i.horodateur, ligne: i.ligne });
+      if (!r.ok) { if (r.erreur === 'session_invalide') { router(); return; } vueAdmin(i, dire(r.erreur)); return; }
+      adm = null;
       await chargerListeSilencieuse();
       vueListe();
     });
