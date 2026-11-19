@@ -113,6 +113,8 @@ export class Relais extends DurableObject {
         if (u.role !== 'admin') return { ok: false, erreur: 'refuse' };
         // L'envoi du mail peut prendre quelques secondes : hors verrou, il ne bloque pas les autres.
         if (req.action === 'admin_inviter') return await this.inviter(u, req);
+        // Modifier ou supprimer une intervention (page administrateur).
+        if (req.action === 'admin_modifier' || req.action === 'admin_effacer') return await this.avecVerrou(() => this.modifierIntervention(u, req));
         return await this.avecVerrou(() => this.admin(u, req));
       }
       switch (req.action) {
@@ -719,6 +721,51 @@ export class Relais extends DurableObject {
     const url = this.env.PUSHOVER_API || 'https://api.pushover.net/1/messages.json';
     this.ctx.waitUntil(fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ token, user, title: titre, message }).toString() }).catch(() => {}));
+  }
+
+  /* ---------- Administration : modifier ou supprimer une intervention ---------- */
+
+  // Réservé aux administrateurs. Pas d'historique (voulu par Marc). Seules les interventions actives
+  // (« En attente », « En cours ») sont modifiables ; la ligne est toujours retrouvée par son Horodateur.
+  async modifierIntervention(u, req) {
+    const pos = await this.lirePositions();
+    if (!pos) return { ok: false, erreur: 'colonne_manquante' };
+    const trouve = await this.trouverLigne(req, pos);
+    if (!trouve) return { ok: false, erreur: 'intervention_introuvable' };
+    const { ligne, valeurs: v } = trouve;
+    const statut = txt(v[pos['Statut']]);
+    if (!STATUTS_ACTIFS[statut]) return { ok: false, erreur: 'deja_terminee', statut };
+
+    if (req.action === 'admin_effacer') {
+      const id = await this.idOnglet();
+      await this.sheets(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ deleteDimension: {
+        range: { sheetId: id, dimension: 'ROWS', startIndex: ligne - 1, endIndex: ligne } } }] }) });
+      if (this.derniereLigne >= ligne) this.derniereLigne -= 1;
+      return { ok: true, supprime: true };
+    }
+
+    const ch = {};
+    if (req.nature !== undefined) ch['Nature de la panne'] = nettoyer(req.nature, 500);
+    if (req.appareils !== undefined) {
+      const liste = [].concat(req.appareils).map((x) => txt(x).toUpperCase()).filter(Boolean);
+      if (!liste.length || liste.some((x) => !APPAREILS.includes(x))) return { ok: false, erreur: 'appareil_invalide' };
+      ch['Appareils café'] = joindre(liste);
+    }
+    if (req.licence !== undefined || req.cafe !== undefined) {
+      const cafe = await this.trouverCafe(req.licence, req.cafe);
+      if (!cafe) return { ok: false, erreur: 'cafe_inconnu' };
+      Object.assign(ch, { 'Café/Salle:': cafe.nom, 'Ville': cafe.ville, 'Licence': cafe.licence, 'Adresse': cafe.adresse,
+        'Code Postal': /^\d+$/.test(String(cafe.cp)) ? Number(cafe.cp) : cafe.cp, 'Société': cafe.societe });
+    }
+    // Repasser « En cours » en « En attente » : le technicien et l'heure de début sont retirés.
+    if (req.remettreEnAttente) {
+      if (statut !== 'En cours') return { ok: false, erreur: 'pas_en_cours', statut };
+      Object.assign(ch, { 'Statut': 'En attente', 'Technicien': '', 'Début': '' });
+    }
+    Object.keys(ch).forEach((k) => { if (pos[k] === undefined) delete ch[k]; });
+    if (!Object.keys(ch).length) return { ok: false, erreur: 'rien_a_modifier' };
+    await this.ecrire(ligne, pos, ch);
+    return { ok: true, ligne };
   }
 
   /* ---------- Rapport machine à café : pièces remplacées et signature ---------- */
