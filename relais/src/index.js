@@ -113,6 +113,7 @@ export class Relais extends DurableObject {
         if (u.role !== 'admin') return { ok: false, erreur: 'refuse' };
         // L'envoi du mail peut prendre quelques secondes : hors verrou, il ne bloque pas les autres.
         if (req.action === 'admin_inviter') return await this.inviter(u, req);
+        if (req.action === 'admin_diag_pushover') return await this.diagPushover();
         // Modifier ou supprimer une intervention (page administrateur).
         if (req.action === 'admin_modifier' || req.action === 'admin_effacer') return await this.avecVerrou(() => this.modifierIntervention(u, req));
         return await this.avecVerrou(() => this.admin(u, req));
@@ -715,12 +716,36 @@ export class Relais extends DurableObject {
   }
 
   // Envoi Pushover au groupe : n'attend pas, une notification ratée ne bloque jamais l'écriture.
+  // La réponse est vérifiée et gardée (dernier envoi) pour le diagnostic admin.
   notifier(titre, message) {
     const token = this.env.PUSHOVER_TOKEN, user = this.env.PUSHOVER_USER;
-    if (!token || !user) return;
+    if (!token || !user) { this.dernierPushover = { t: Date.now(), ok: false, erreur: 'secrets_absents' }; return; }
     const url = this.env.PUSHOVER_API || 'https://api.pushover.net/1/messages.json';
-    this.ctx.waitUntil(fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ token, user, title: titre, message }).toString() }).catch(() => {}));
+    const envoi = fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token, user, title: titre, message }).toString() })
+      .then(async (rep) => {
+        const texte = (await rep.text()).slice(0, 300);
+        this.dernierPushover = { t: Date.now(), ok: rep.ok, http: rep.status, reponse: texte, titre };
+        if (!rep.ok) console.error('Pushover refusé : ' + rep.status + ' ' + texte);
+      })
+      .catch((e) => { this.dernierPushover = { t: Date.now(), ok: false, erreur: String(e) }; console.error('Pushover : ' + e); });
+    this.ctx.waitUntil(envoi);
+    return envoi;
+  }
+
+  // Diagnostic administrateur : vérifie la clé et le groupe Pushover SANS envoyer de message
+  // (API « validate » de Pushover), et rend le résultat du dernier envoi réel.
+  async diagPushover() {
+    const token = this.env.PUSHOVER_TOKEN, user = this.env.PUSHOVER_USER;
+    const res = { tokenPresent: !!token, userPresent: !!user, dernier: this.dernierPushover || null };
+    if (token && user) {
+      try {
+        const rep = await fetch('https://api.pushover.net/1/users/validate.json', { method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token, user }).toString() });
+        res.validation = { http: rep.status, reponse: (await rep.text()).slice(0, 300) };
+      } catch (e) { res.validation = { erreur: String(e) }; }
+    }
+    return Object.assign({ ok: true }, res);
   }
 
   /* ---------- Administration : modifier ou supprimer une intervention ---------- */
