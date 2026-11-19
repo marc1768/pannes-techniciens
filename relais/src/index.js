@@ -717,8 +717,14 @@ export class Relais extends DurableObject {
 
   // Envoi Pushover au groupe : n'attend pas, une notification ratée ne bloque jamais l'écriture.
   // La réponse est vérifiée et gardée (dernier envoi) pour le diagnostic admin.
+  // Clés Pushover nettoyées (espaces, retours à la ligne, guillemets collés par erreur).
+  clesPushover() {
+    const net = (v) => String(v || '').replace(/[\s"'`]/g, '');
+    return { token: net(this.env.PUSHOVER_TOKEN), user: net(this.env.PUSHOVER_USER) };
+  }
+
   notifier(titre, message) {
-    const token = this.env.PUSHOVER_TOKEN, user = this.env.PUSHOVER_USER;
+    const { token, user } = this.clesPushover();
     if (!token || !user) { this.dernierPushover = { t: Date.now(), ok: false, erreur: 'secrets_absents' }; return; }
     const url = this.env.PUSHOVER_API || 'https://api.pushover.net/1/messages.json';
     const envoi = fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -736,8 +742,12 @@ export class Relais extends DurableObject {
   // Diagnostic administrateur : vérifie la clé et le groupe Pushover SANS envoyer de message
   // (API « validate » de Pushover), et rend le résultat du dernier envoi réel.
   async diagPushover() {
-    const token = this.env.PUSHOVER_TOKEN, user = this.env.PUSHOVER_USER;
-    const res = { tokenPresent: !!token, userPresent: !!user, dernier: this.dernierPushover || null };
+    const { token, user } = this.clesPushover();
+    // Empreinte sans révéler la clé : longueur brute/nettoyée et 3 premiers + 2 derniers caractères.
+    const emp = (brut, net) => ({ longueurBrute: String(brut || '').length, longueur: net.length,
+      debut: net.slice(0, 3), fin: net.slice(-2) });
+    const res = { tokenPresent: !!token, userPresent: !!user, dernier: this.dernierPushover || null,
+      token: emp(this.env.PUSHOVER_TOKEN, token), user: emp(this.env.PUSHOVER_USER, user) };
     if (token && user) {
       try {
         const rep = await fetch('https://api.pushover.net/1/users/validate.json', { method: 'POST',
