@@ -5,10 +5,35 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.15';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.16';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
+
+  /* ---------- Style d'affichage choisi par chaque technicien (gardé sur son téléphone) ---------- */
+  // a = Tuiles couleur, b = Tableau compact (par défaut), c = Éditorial.
+  const STYLES = [['a', 'Tuiles couleur'], ['b', 'Tableau compact'], ['c', 'Éditorial']];
+  function styleActuel() {
+    try { const s = localStorage.getItem('tech_style'); return STYLES.some((x) => x[0] === s) ? s : 'b'; } catch (e) { return 'b'; }
+  }
+  function appliquerStyle(s) {
+    document.documentElement.dataset.style = s;
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.content = s === 'a' ? '#f4f1ec' : s === 'c' ? '#ffffff' : '#0f2a44';
+  }
+  function styleSuivant() {
+    const k = STYLES.findIndex((x) => x[0] === styleActuel());
+    const s = STYLES[(k + 1) % STYLES.length];
+    try { localStorage.setItem('tech_style', s[0]); } catch (e) { /* navigation privée : le style reste pour la session */ }
+    appliquerStyle(s[0]);
+    return s[1];
+  }
+  appliquerStyle(styleActuel());
+  // Petit message passager en bas de l'écran (nom du style choisi).
+  function bulle(texte) {
+    const b = document.createElement('div'); b.className = 'bulle'; b.textContent = texte;
+    document.body.appendChild(b); setTimeout(() => b.remove(), 1600);
+  }
 
   /* ---------- Types d'intervention : couleurs et icônes (mêmes que les maquettes) ---------- */
   const SVG = (d, extra) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
@@ -30,6 +55,8 @@
     'PANNE': 'Panne', 'MACHINE A CAFE': 'Machine à café', 'ENTRETIEN': 'Entretien',
     'LIVRAISON': 'Livraison', 'LIVRAISON HORECA': 'Livraison Horeca', 'RAPPEL': 'Alerte', 'AUTRE': 'Autre'
   };
+  const LIBELLES_COURTS = { 'PANNE': 'Pannes', 'MACHINE A CAFE': 'Café', 'ENTRETIEN': 'Entret.', 'LIVRAISON': 'Livr.',
+    'LIVRAISON HORECA': 'Horeca', 'RAPPEL': 'Alerte', 'AUTRE': 'Autre' };
   const ORDRE_TYPES = ['PANNE', 'MACHINE A CAFE', 'ENTRETIEN', 'LIVRAISON', 'LIVRAISON HORECA', 'RAPPEL', 'AUTRE'];
 
   const FLECHE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
@@ -232,7 +259,7 @@
   /* ---------- Écran : liste des interventions ---------- */
   // Ligne compacte du tableau (style « dispatch ») : barre de couleur du type, temps à gauche,
   // nom et détail au centre, statut et technicien à droite.
-  function carteHtml(i) {
+  function carteHtml(i, n) {
     const c = COULEURS[i.type] || 'panne';
     const estRappel = i.type === 'RAPPEL';
     const enCours = i.statut === 'En cours';
@@ -247,6 +274,35 @@
     const titre = estRappel ? 'Alerte' : ech(i.cafe);
     const detail = estRappel ? ech(i.nature || 'Rappel')
       : ech([i.ville, i.appareil && i.appareil !== i.type ? i.appareil : '', i.encaisser || i.natureCourte || i.nature].filter(Boolean).join(' · '));
+    const ico = ICONES[i.type] || ICONES['PANNE'];
+    const texte = estRappel ? ech(i.nature || 'Rappel') : ech(i.encaisser || i.natureCourte || i.nature || '');
+    const style = styleActuel();
+    // Style A « Tuiles couleur » : grosse carte teintée par type, pastille d'icône, statut en badge.
+    if (style === 'a') {
+      const sous = estRappel ? 'Rappel' : ech([i.ville, i.appareil && i.appareil !== i.type ? i.appareil : LIBELLES[i.type]].filter(Boolean).join(' · '));
+      return '<button class="ligne carteA" style="--k:var(--' + c + ');--kf:var(--' + c + '-f);--kc:var(--' + c + '-c)" data-h="' + i.horodateur + '" data-l="' + i.ligne + '">' +
+        '<span class="a-pastille">' + ico + '</span>' +
+        '<span class="a-corps">' +
+          '<span class="a-haut"><span class="a-nom">' + titre + '</span><span class="a-meta' + (retard ? ' retard' : '') + '">' + ech(qui || d) + '</span></span>' +
+          '<span class="a-sous">' + sous + '</span>' +
+          (texte ? '<span class="a-texte' + (estRappel ? ' rappel' : '') + (i.encaisser ? ' encaisser' : '') + '">' + texte + '</span>' : '') +
+          '<span class="statut ' + st + '">' + stTxt + '</span>' +
+        '</span></button>';
+    }
+    // Style C « Éditorial » : blanc, numéro, petit carré de couleur, gros nom en noir.
+    if (style === 'c') {
+      const type = estRappel ? 'Rappel' : ech([LIBELLES[i.type], i.appareil && i.appareil !== i.type ? i.appareil : ''].filter(Boolean).join(' · '));
+      const suite = [estRappel ? '' : i.ville, i.encaisser || i.natureCourte || i.nature].filter(Boolean).join(' — ') +
+        (st !== 'st-attente' ? ' · ' + stTxt.toLowerCase() + (qui ? ', ' + qui : '') : (qui ? ' · ' + qui : ''));
+      return '<button class="ligne edito" data-h="' + i.horodateur + '" data-l="' + i.ligne + '">' +
+        '<span class="c-num">' + String((n || 0) + 1).padStart(2, '0') + '</span>' +
+        '<span class="c-corps">' +
+          '<span class="c-haut"><span class="c-carre" style="background:var(--' + c + ')"></span><span class="c-type">' + type + '</span>' +
+            '<span class="c-meta">' + ech(d || stTxt) + '</span></span>' +
+          '<span class="c-nom">' + titre + '</span>' +
+          '<span class="c-texte' + (estRappel ? ' rappel' : '') + '">' + ech(suite) + '</span>' +
+        '</span></button>';
+    }
     return '<button class="ligne" data-h="' + i.horodateur + '" data-l="' + i.ligne + '">' +
       '<span class="ligne-barre" style="background:var(--' + c + ')"></span>' +
       '<span class="ligne-temps"><b class="mono">' + ech(tVal) + '</b><small>' + ech(tUnite) + '</small></span>' +
@@ -268,8 +324,8 @@
     const compteurs = types.map((t) => {
       const c = COULEURS[t];
       return '<button data-type="' + t + '" aria-pressed="' + (etat.filtreType === t) + '" aria-label="' + (parType[t] || 0) + ' ' + ech(LIBELLES[t]) + '"' +
-        (parType[t] ? '' : ' class="zero"') + ' style="color:var(--' + c + '-l)">' +
-        (ICONES[t] || '') + '<b class="mono">' + (parType[t] || 0) + '</b></button>';
+        (parType[t] ? '' : ' class="zero"') + ' style="--k:var(--' + c + ');--kl:var(--' + c + '-l);--kf:var(--' + c + '-f);--kc:var(--' + c + '-c)">' +
+        (ICONES[t] || '') + '<b class="mono">' + (parType[t] || 0) + '</b><small>' + ech(LIBELLES_COURTS[t] || '') + '</small></button>';
     }).join('');
 
     let liste = etat.interventions;
@@ -284,6 +340,8 @@
         '<div class="titre-ligne">' +
           '<div><div class="sous">Interventions · ' + ech(jour) + '</div><h1>' +
             etat.interventions.length + ' à traiter</h1></div>' +
+          '<button class="btn-actu" id="b-style" aria-label="Changer de style d’affichage" title="Changer de style">' +
+            SVG('<path d="M12 22a10 10 0 1 1 10-10c0 2.2-1.8 3-3.5 3H17a2 2 0 0 0-1.5 3.3c.6.7.3 1.7-.6 1.7z"/><circle cx="7.5" cy="10.5" r="1.2"/><circle cx="12" cy="7" r="1.2"/><circle cx="16.5" cy="10.5" r="1.2"/>') + '</button>' +
           '<button class="btn-actu' + (etat.chargement ? ' occupe' : '') + '" id="b-actu" aria-label="Actualiser">' +
             SVG('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>') + '</button>' +
           '<button class="btn-compte" id="b-compte"><span class="pastille">' + ech(initiale(etat.moi.nom)) + '</span>' + ech(etat.moi.nom) + '</button>' +
@@ -299,7 +357,7 @@
       '<main id="liste" class="tableau">' +
         (etat.erreur ? '<div class="msg msg-err">' + ech(etat.erreur) + '</div>' : '') +
         (etat.chargement && !etat.interventions.length ? '<div class="chargement"><span class="tourne"></span> Chargement...</div>' :
-          liste.length ? liste.map(carteHtml).join('') :
+          liste.length ? liste.map((x, n) => carteHtml(x, n)).join('') :
           '<div class="vide">Aucune intervention à afficher.<br>Tire vers le bas pour actualiser.</div>') +
       '</main>' +
       '<footer>' +
@@ -324,6 +382,7 @@
       if (i) vueDetail(i);
     });
     $('b-actu').addEventListener('click', () => chargerListe(true));
+    $('b-style').addEventListener('click', () => { const nom = styleSuivant(); vueListe(); bulle('Style : ' + nom); });
     $('b-nouvelle').addEventListener('click', vueNouvelle);
     $('b-compte').addEventListener('click', vueCompte);
     $('b-compte2').addEventListener('click', vueCompte);
@@ -647,7 +706,7 @@
 
     app().innerHTML =
       '<div class="page">' +
-        '<div class="det-entete" style="border-bottom-color:var(--' + c + ')">' +
+        '<div class="det-entete" style="border-bottom-color:var(--' + c + ');--k:var(--' + c + ');--kf:var(--' + c + '-f);--kc:var(--' + c + '-c)">' +
           '<div class="det-haut"><button class="btn-retour" id="b-ret" aria-label="Retour à la liste">' + FLECHE + '</button>' +
             '<span class="det-ref mono">' + ech(i.ticket ? '#' + i.ticket : (h ? 'Ajoutée ' + h : '')) + '</span>' +
             '<span class="statut ' + stCls + '">' + ech(stTxt) + '</span></div>' +
