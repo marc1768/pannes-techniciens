@@ -222,6 +222,16 @@
   .badge-prov { background: var(--attente-c); border: 1px solid var(--attente-b); color: var(--attente-f); }
   .badge-off { background: var(--bord); color: var(--doux); }
   .badge-admin { background: var(--accent-clair); color: var(--accent-fonce); }
+  /* Clôture : machines, pièces remplacées, signature */
+  .puces-m { display: flex; flex-wrap: wrap; gap: 8px; }
+  .puce-m { height: 42px; padding: 0 14px; border-radius: 21px; border: 1px solid var(--bord); background: var(--carte); font-size: .85rem; font-weight: 700; }
+  .puce-m.prise { border: 2px solid var(--panne); background: var(--panne-c); }
+  .puce-m.indet.prise { border-color: #c62828; background: #fdecea; color: #c62828; }
+  .ligne-piece { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--bord); }
+  .pas { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--bord); background: var(--carte); font-size: 1.2rem; font-weight: 800; }
+  .pas.suppr { color: #c62828; }
+  .zone-sig { width: 100%; height: 190px; border: 2px dashed var(--bord); border-radius: 14px; background: #fff; touch-action: none; }
+  .btn-lien { background: none; border: none; color: var(--accent); font-weight: 700; font-size: .9rem; padding: 8px 4px; }
   .petits { display: flex; gap: 8px; }
   .petits button { flex: 1; height: 48px; border-radius: 12px; font-size: .85rem; font-weight: 700; border: 1px solid var(--bord); background: var(--carte); }
   .petits .pr { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -230,6 +240,6 @@
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js?v=13" defer></script>
+<script src="app.js?v=14" defer></script>
 </body>
 </html>
