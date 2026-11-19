@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Nunito:wght@500;700;800;900&family=Archivo:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
@@ -69,10 +69,11 @@
   /* ---------- Compteurs par type ---------- */
   .compteurs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
   .compteurs button {
-    min-width: 0; height: 54px; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,.08);
+    min-width: 0; height: 54px; border-radius: 8px; border: 1px solid transparent; background: rgba(255,255,255,.08); color: var(--kl);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0;
   }
   .compteurs button.zero { opacity: .45; }
+  .compteurs small { display: none; }
   .compteurs svg { width: 18px; height: 18px; flex: none; }
   .compteurs b { font-size: 1rem; font-weight: 600; color: #fff; }
   .compteurs button[aria-pressed="true"] { border-color: currentColor; background: rgba(255,255,255,.16); opacity: 1; }
@@ -288,10 +289,129 @@
   .petits button { flex: 1; height: 48px; border-radius: 12px; font-size: .85rem; font-weight: 700; border: 1px solid var(--bord); background: var(--carte); }
   .petits .pr { background: var(--accent); border-color: var(--accent); color: #fff; }
   .petits .sec { border: 1.5px solid var(--accent); color: var(--accent); }
+  /* ================================================================
+     Styles au choix du technicien (bouton palette en haut de la liste).
+     B « Tableau compact » = règles ci-dessus. A et C ne font que surcharger.
+     ================================================================ */
+  html[data-style="a"] .titre-ligne .sous, html[data-style="c"] .titre-ligne .sous { white-space: nowrap; }
+  html[data-style="a"] .titre-ligne > div:first-child, html[data-style="c"] .titre-ligne > div:first-child { min-width: 0; flex: 1; }
+  html[data-style="c"] .titre-ligne .sous { font-size: .65rem; }
+  .bulle { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 10px 18px; border-radius: 20px; font-size: .9rem; font-weight: 700; z-index: 50;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25); animation: bulle 1.6s ease forwards; pointer-events: none; }
+  @keyframes bulle { 0% { opacity: 0; } 12% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* ---------- A · Tuiles couleur ---------- */
+  html[data-style="a"] { --fond: #f4f1ec; --carte: #ffffff; --doux2: #ffffff; --texte: #1f1a17; --doux: #6b6259; --bord: #e7e1d8;
+    --nuit: #1f1a17; --accent: #1f1a17; --accent-fonce: #000; --accent-clair: #ebe5dc; --accent-c: #ebe5dc; --rayon: 20px;
+    --panne-c: #fbe3e6; --cafe-c: #efe3fb; --entretien-c: #e0e9fd; --livraison-c: #dcf2ea; --horeca-c: #faebcb; --rappel-c: #fde1e1; }
+  html[data-style="a"] body { font-family: "Nunito", system-ui, sans-serif; }
+  html[data-style="a"] header { background: var(--fond); color: var(--texte); padding-bottom: 4px; }
+  html[data-style="a"] .titre-ligne .sous { color: var(--doux); text-transform: none; letter-spacing: 0; font-size: .85rem; font-weight: 700; }
+  html[data-style="a"] .titre-ligne h1 { font-size: 1.75rem; font-weight: 900; letter-spacing: -.02em; }
+  html[data-style="a"] .btn-actu, html[data-style="a"] .btn-compte { background: #fff; border-color: var(--bord); color: var(--texte); }
+  html[data-style="a"] .pastille { background: var(--texte); color: #fff; }
+  html[data-style="a"] .compteurs { gap: 6px; }
+  html[data-style="a"] .compteurs button { height: 64px; border-radius: 16px; background: var(--kc); color: var(--kf); align-items: flex-start; padding: 0 8px; }
+  html[data-style="a"] .compteurs b { color: var(--kf); font-family: "Nunito", sans-serif; font-weight: 900; font-size: 1.15rem; line-height: 1; }
+  html[data-style="a"] .compteurs small { display: block; font-size: .6rem; font-weight: 800; white-space: nowrap; overflow: hidden; max-width: 100%; }
+  html[data-style="a"] .compteurs button[aria-pressed="true"] { border: 2px solid var(--kf); background: var(--kc); }
+  html[data-style="a"] .filtres { margin: 0; background: transparent; border: 0; padding: 0 0 6px; gap: 6px; }
+  html[data-style="a"] .filtres button { height: 38px; border: 0; border-radius: 19px; background: #fff; font-weight: 800; color: var(--doux); }
+  html[data-style="a"] .filtres button[aria-pressed="true"] { background: var(--texte); color: #fff; }
+  html[data-style="a"] main.tableau { background: var(--fond); padding: 8px 14px calc(110px + env(safe-area-inset-bottom)); gap: 12px; }
+  html[data-style="a"] .ligne.carteA { min-height: 0; border: 0; border-radius: 22px; background: var(--kc); padding: 14px; gap: 14px; align-items: flex-start; }
+  html[data-style="a"] .ligne.carteA:active { background: var(--kc); filter: brightness(.95); }
+  .a-pastille { width: 50px; height: 50px; flex: none; border-radius: 16px; background: var(--kf); color: #fff; display: flex; align-items: center; justify-content: center; }
+  .a-pastille svg { width: 26px; height: 26px; }
+  .a-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .a-haut { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .a-nom { font-size: 1.05rem; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .a-meta { font-size: .75rem; font-weight: 800; opacity: .75; white-space: nowrap; }
+  .a-meta.retard { color: var(--panne-f); opacity: 1; }
+  .a-sous { font-size: .8rem; font-weight: 700; opacity: .75; }
+  .a-texte { font-size: .88rem; font-weight: 700; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .a-texte.rappel, .a-texte.encaisser { color: var(--panne-f); }
+  .a-corps .statut { align-self: flex-start; margin-left: 0; margin-top: 4px; border-radius: 12px; padding: 4px 10px; font-weight: 900; }
+  html[data-style="a"] footer { left: 14px; right: 14px; bottom: calc(12px + env(safe-area-inset-bottom)); height: 70px; padding-bottom: 0;
+    border-radius: 35px; background: var(--texte); border: 0; box-shadow: 0 10px 30px rgba(31,26,23,.25); }
+  html[data-style="a"] footer button { color: #b8aea4; font-weight: 800; }
+  html[data-style="a"] footer button[aria-current="page"] { color: #fff; }
+  html[data-style="a"] .btn-plus { border-radius: 32px; width: 62px; height: 62px; margin-top: -34px; background: #ff6b35; border: 5px solid var(--fond); box-shadow: none; }
+  html[data-style="a"] .det-entete { background: var(--kc); color: var(--texte); border-bottom: 0; border-radius: 0 0 28px 28px; padding-bottom: 18px; }
+  html[data-style="a"] .det-haut .btn-retour { color: var(--texte); background: #fff; border-radius: 22px; margin-left: 0; }
+  html[data-style="a"] .det-ref { color: var(--doux); }
+  html[data-style="a"] .det-ico { width: 52px; height: 52px; border-radius: 16px; background: var(--kf); color: #fff !important; display: flex; align-items: center; justify-content: center; flex: none; }
+  html[data-style="a"] .det-titre h1 { font-weight: 900; font-size: 1.6rem; }
+  html[data-style="a"] .det-sous { color: var(--doux); font-weight: 700; }
+  html[data-style="a"] .infos, html[data-style="a"] .bloc, html[data-style="a"] .carte-plan, html[data-style="a"] .itineraire { border: 0; border-radius: 20px; }
+  html[data-style="a"] .carte-plan { border-radius: 20px 20px 0 0; } html[data-style="a"] .itineraire { border-radius: 0 0 20px 20px; }
+  html[data-style="a"] .btn { border-radius: 26px; font-weight: 900; }
+  html[data-style="a"] .actions { background: var(--fond); border-top: 0; }
+  html[data-style="a"] .it-plan, html[data-style="a"] .it-maps, html[data-style="a"] .it-waze { color: var(--texte); }
+
+  /* ---------- C · Éditorial ---------- */
+  html[data-style="c"] { --fond: #ffffff; --carte: #ffffff; --doux2: #ffffff; --texte: #111111; --doux: #555555; --bord: #dddddd;
+    --nuit: #111111; --accent: #111111; --accent-fonce: #000; --accent-clair: #eeeeee; --accent-c: #eeeeee; --rayon: 0px; }
+  html[data-style="c"] body { font-family: "Archivo", system-ui, sans-serif; }
+  html[data-style="c"] .mono { font-family: "Archivo", system-ui, sans-serif; }
+  html[data-style="c"] header { background: #fff; color: var(--texte); padding: 18px 20px 0; gap: 10px; }
+  html[data-style="c"] .titre-ligne { align-items: flex-end; }
+  html[data-style="c"] .titre-ligne .sous { color: var(--doux); font-weight: 700; letter-spacing: .12em; }
+  html[data-style="c"] .titre-ligne h1 { white-space: nowrap; font-size: 2.1rem; font-weight: 900; line-height: .95; letter-spacing: -.05em; }
+  html[data-style="c"] .btn-actu, html[data-style="c"] .btn-compte { background: #fff; border: 1.5px solid var(--texte); color: var(--texte); }
+  html[data-style="c"] .btn-compte { border-radius: 0; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; }
+  html[data-style="c"] .btn-actu { border-radius: 0; }
+  html[data-style="c"] .pastille { display: none; }
+  html[data-style="c"] .btn-compte { padding: 0 12px; }
+  html[data-style="c"] .compteurs { border-top: 2px solid var(--texte); border-bottom: 1px solid var(--bord); padding: 10px 0; gap: 2px; }
+  html[data-style="c"] .compteurs button { height: auto; background: none; border-radius: 0; border: 0; align-items: flex-start; padding: 0; color: var(--k); }
+  html[data-style="c"] .compteurs svg { display: none; }
+  html[data-style="c"] .compteurs b { color: var(--texte); font-size: 1.45rem; font-weight: 800; line-height: 1; }
+  html[data-style="c"] .compteurs small { display: flex; align-items: center; gap: 3px; font-size: .55rem; font-weight: 700; text-transform: uppercase; color: var(--doux); white-space: nowrap; }
+  html[data-style="c"] .compteurs small::before { content: ""; width: 7px; height: 7px; background: var(--k); flex: none; }
+  html[data-style="c"] .compteurs button.zero { opacity: .35; }
+  html[data-style="c"] .compteurs button[aria-pressed="true"] { box-shadow: inset 0 -3px 0 var(--k); opacity: 1; }
+  html[data-style="c"] .filtres { margin: 0 -20px; padding: 0 14px; }
+  html[data-style="c"] .filtres button { text-transform: uppercase; letter-spacing: .06em; font-size: .72rem; font-weight: 800; }
+  html[data-style="c"] .filtres button[aria-pressed="true"] { border-bottom-color: var(--texte); color: var(--texte); }
+  html[data-style="c"] main.tableau { padding: 0 20px calc(90px + env(safe-area-inset-bottom)); }
+  html[data-style="c"] .ligne.edito { min-height: 0; padding: 14px 0; gap: 14px; border-bottom: 1px solid var(--bord); align-items: flex-start; }
+  html[data-style="c"] .ligne.edito:active { background: #f5f5f5; }
+  .c-num { width: 22px; flex: none; font-size: .8rem; font-weight: 700; color: #777; padding-top: 3px; }
+  .c-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .c-haut { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .c-carre { width: 10px; height: 10px; flex: none; }
+  .c-type { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c-meta { margin-left: auto; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+  .c-nom { font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .c-texte { font-size: .88rem; color: #444; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .c-texte.rappel { color: var(--rappel-f); font-weight: 700; }
+  html[data-style="c"] footer { background: #111; border: 0; }
+  html[data-style="c"] footer button { color: #aaa; text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
+  html[data-style="c"] footer button[aria-current="page"] { color: #fff; }
+  html[data-style="c"] footer button:active { background: #222; color: #fff; }
+  html[data-style="c"] .btn-plus { background: #fff; color: #111; border-radius: 28px; margin-top: 0; box-shadow: none; }
+  html[data-style="c"] .det-entete { background: #fff; color: var(--texte); border-bottom: 0; border-top: 8px solid var(--k); padding-top: calc(6px + env(safe-area-inset-top)); }
+  html[data-style="c"] .det-haut .btn-retour { color: var(--texte); }
+  html[data-style="c"] .det-ref { color: var(--doux); }
+  html[data-style="c"] .det-ico { display: none; }
+  html[data-style="c"] .det-titre h1 { font-size: 2.3rem; font-weight: 900; line-height: .95; letter-spacing: -.05em; }
+  html[data-style="c"] .det-sous { color: var(--doux); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: .72rem; }
+  html[data-style="c"] .infos { border: 0; border-top: 2px solid var(--texte); border-radius: 0; }
+  html[data-style="c"] .bloc { border: 0; border-bottom: 1px solid var(--bord); border-radius: 0; padding: 12px 0; }
+  html[data-style="c"] .carte-plan, html[data-style="c"] .itineraire { border-radius: 0; }
+  html[data-style="c"] .itineraire a { text-transform: uppercase; letter-spacing: .08em; }
+  html[data-style="c"] .it-plan, html[data-style="c"] .it-maps, html[data-style="c"] .it-waze { color: var(--texte); }
+  html[data-style="c"] .btn { border-radius: 0; text-transform: uppercase; letter-spacing: .1em; font-weight: 800; }
+  html[data-style="c"] .btn-prendre { background: #111; }
+  html[data-style="c"] .btn-reserver, html[data-style="c"] .btn-second { border: 2px solid #111; color: #111; }
+  html[data-style="c"] .actions { border-top: 2px solid #111; }
+  html[data-style="c"] .statut { border-radius: 0; }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<script src="app.js?v=16" defer></script>
+<script src="app.js?v=17" defer></script>
 </body>
 </html>
