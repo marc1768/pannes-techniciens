@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.10';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.11';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -629,10 +629,12 @@
         '</div>' +
         '<div class="contenu" style="padding-top:0">' +
           (msg ? '<div class="msg msg-err">' + ech(msg) + '</div>' : '') +
-          (i.nature ? '<div class="bloc"><div class="lib">Problème signalé</div><div class="val">' + ech(i.nature) + '</div></div>' : '') +
+          // « À ENCAISSER » a déjà son bandeau : on ne le répète pas dans le texte.
+          (i.nature ? '<div class="bloc"><div class="lib">Problème signalé</div><div class="val">' +
+            ech(i.encaisser ? i.nature.replace(/\s*[–—-]?\s*À\s*ENCAISSER.*$/i, '') : i.nature) + '</div></div>' : '') +
           (i.encaisser ? '<div class="msg msg-info">' + ech(i.encaisser) + '</div>' : '') +
           (i.consigne ? '<div class="msg msg-info">' + ech(i.consigne) + '</div>' : '') +
-          (i.livraisonLe ? '<div class="bloc"><div class="lib">Livraison</div><div class="val">' + ech(i.livraisonLe) + '</div></div>' : '') +
+          (i.livraisonLe ? '<div class="bloc"><div class="lib">Livraison</div><div class="val">' + ech(i.livraisonLe.replace(/^Livraison\s*:\s*/i, '')) + '</div></div>' : '') +
           // Produits à charger (livraison Horeca venue d'une vente au comptoir), fournis par le relais.
           (i.produits && i.produits.length ?
             '<div class="bloc"><div class="lib">Produits à charger' + (i.ticket ? ' · ticket ' + ech(i.ticket) : '') + '</div>' +
