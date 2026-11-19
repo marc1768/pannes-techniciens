@@ -118,6 +118,7 @@ export class Relais extends DurableObject {
       switch (req.action) {
         case 'liste': return await this.liste();
         case 'cafes': return await this.cafes();
+        case 'catalogue': return await this.catalogue();
         case 'creer': return await this.avecVerrou(() => this.creer(u, req));
         case 'prendre': return await this.avecVerrou(() => this.agir('prendre', u, req));
         case 'accompagner': return await this.avecVerrou(() => this.agir('accompagner', u, req));
@@ -566,6 +567,15 @@ export class Relais extends DurableObject {
           const champs = this.champsCloture(req, pos);
           if (champs.erreur) return { ok: false, erreur: champs.erreur };
           Object.assign(ch, champs.valeurs);
+          // Comme AppSheet : un appareil INDETERMINE doit être désigné avant de pouvoir clôturer.
+          const appareilFinal = ch['Appareils café'] !== undefined ? ch['Appareils café'] : txt(v[pos['Appareils café']]);
+          if (listeValeurs(appareilFinal).map((x) => x.toUpperCase()).includes('INDETERMINE')) return { ok: false, erreur: 'appareil_a_preciser' };
+          // MACHINE A CAFE : pièces remplacées et signature du client (obligatoire), comme le formulaire de clôture d'AppSheet.
+          if (typeDe(appareilFinal) === 'MACHINE A CAFE') {
+            const rapport = await this.rapportMachine(req, v[pos['Horodateur']], pos);
+            if (rapport.erreur) return { ok: false, erreur: rapport.erreur };
+            Object.assign(ch, rapport.valeurs);
+          }
         }
         await this.ecrire(ligne, pos, ch, formats);
         return sortie({ statut: 'Fin' });
@@ -711,8 +721,90 @@ export class Relais extends DurableObject {
       body: new URLSearchParams({ token, user, title: titre, message }).toString() }).catch(() => {}));
   }
 
-  // Champs facultatifs du formulaire de clôture (copie fidèle de Cloture_form). La signature et les pièces
-  // remplacées viendront après le relevé de leur format dans AppSheet.
+  /* ---------- Rapport machine à café : pièces remplacées et signature ---------- */
+
+  // Catalogue des pièces (onglet « Catalogue pièces », colonne A, lecture seule), cache 10 minutes.
+  async lireCatalogue() {
+    if (this.catalogue_ && Date.now() - this.catalogue_.t < CACHE_PLACES_MS) return this.catalogue_.liste;
+    const onglet = this.env.ONGLET_CATALOGUE || 'Catalogue pièces';
+    const r = await this.sheets('/values/' + encodeURIComponent("'" + onglet.replace(/'/g, "''") + "'!A2:A") +
+      '?majorDimension=ROWS', { method: 'GET' });
+    const liste = (r.values || []).map((l) => txt(l[0])).filter(Boolean);
+    this.catalogue_ = { t: Date.now(), liste };
+    return liste;
+  }
+  async catalogue() { return { ok: true, pieces: await this.lireCatalogue() }; }
+
+  // Vérifie le rapport, dépose la signature dans Drive (script Google de Marc), puis ajoute les pièces
+  // dans « Pièces remplacées ». Rien n'est écrit sur la ligne de l'intervention avant que tout ait réussi :
+  // la ligne passe à « Fin » en dernier, avec le chemin de la signature au format d'AppSheet.
+  async rapportMachine(req, horodateur, pos) {
+    if (pos['SignatureClient'] === undefined) return { erreur: 'colonne_manquante' };
+    const png = String(req.signature || '').replace(/^data:image\/png;base64,/, '');
+    if (!png || png.length < 200) return { erreur: 'signature_manquante' };
+    if (png.length > 500000 || !/^[A-Za-z0-9+/=]+$/.test(png)) return { erreur: 'signature_invalide' };
+    // Pièces : chaque nom doit être dans le catalogue, quantité entière de 1 à 99.
+    const catalogue = await this.lireCatalogue();
+    const pieces = [];
+    for (const x of [].concat(req.pieces || [])) {
+      const nom = catalogue.find((c) => c.toUpperCase() === txt(x && x.piece).toUpperCase());
+      const q = Math.floor(Number(x && x.quantite));
+      if (!nom) return { erreur: 'piece_inconnue' };
+      if (!(q >= 1 && q <= 99)) return { erreur: 'quantite_invalide' };
+      const deja = pieces.find((p) => p.piece === nom);
+      if (deja) deja.quantite = Math.min(99, deja.quantite + q); else pieces.push({ piece: nom, quantite: q });
+    }
+    if (!this.env.MAIL_URL || !this.env.MAIL_CLE) return { erreur: 'signature_non_configuree' };
+    // Nom de fichier d'AppSheet : « MM-JJ-AAAA HH-MM-SS.SignatureClient.NNNNNN.png » (date de l'Horodateur).
+    const iso = isoDepuisSerie(horodateur);
+    if (!iso) return { erreur: 'intervention_introuvable' };
+    const nom = iso.slice(5, 7) + '-' + iso.slice(8, 10) + '-' + iso.slice(0, 4) + ' ' + iso.slice(11, 19).replace(/:/g, '-') +
+      '.SignatureClient.' + String(100000 + Math.floor(Math.random() * 900000)) + '.png';
+    let r;
+    try {
+      const rep = await fetch(this.env.MAIL_URL, { method: 'POST', redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ cle: this.env.MAIL_CLE, action: 'signature', nom, png }) });
+      r = JSON.parse(await rep.text());
+    } catch (e) { return { erreur: 'signature_echec' }; }
+    if (!r || !r.ok) return { erreur: 'signature_echec' };
+    await this.ajouterPieces(horodateur, pieces);
+    return { valeurs: { 'SignatureClient': (this.env.DOSSIER_SIGNATURES || 'Réponses au formulaire 1_Images') + '/' + nom } };
+  }
+
+  // Lignes de « Pièces remplacées » (Id, Horodateur, Piece, Quantite), comme AppSheet. Si des pièces existent déjà
+  // pour cet Horodateur (essai précédent interrompu), on n'ajoute rien : pas de doublon.
+  async ajouterPieces(horodateur, pieces) {
+    if (!pieces.length) return;
+    const onglet = this.env.ONGLET_PIECES || 'Pièces remplacées';
+    const plage = "'" + onglet.replace(/'/g, "''") + "'!A:D";
+    const exist = await this.sheets('/values/' + encodeURIComponent(plage) +
+      '?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER&majorDimension=ROWS', { method: 'GET' });
+    const t = exist.values || [];
+    const ent = (t[0] || []).map((e) => txt(e));
+    const c = { id: ent.indexOf('Id'), h: ent.indexOf('Horodateur'), p: ent.indexOf('Piece'), q: ent.indexOf('Quantite') };
+    if (c.id < 0 || c.h < 0 || c.p < 0 || c.q < 0) throw new Error('onglet « ' + onglet + ' » : en-tête(s) manquant(s)');
+    if (t.slice(1).some((l) => typeof l[c.h] === 'number' && Math.abs(l[c.h] - horodateur) < 1e-6)) return;
+    const lignes = pieces.map((x) => {
+      const l = ['', '', '', ''];
+      l[c.id] = hex(crypto.getRandomValues(new Uint8Array(4)));      // comme UNIQUEID() d'AppSheet : 8 caractères
+      l[c.h] = horodateur; l[c.p] = x.piece; l[c.q] = x.quantite;
+      return l;
+    });
+    const rep = await this.sheets('/values/' + encodeURIComponent(plage) + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+      { method: 'POST', body: JSON.stringify({ values: lignes }) });
+    // L'Horodateur reste une vraie date (même valeur que la ligne de l'intervention), affichée comme dans la feuille.
+    const m = /!A(\d+):D(\d+)$/.exec((rep.updates && rep.updates.updatedRange) || '');
+    if (m) {
+      const info = await this.sheets('?fields=sheets.properties(sheetId,title)', { method: 'GET' });
+      const f = (info.sheets || []).find((x) => x.properties.title === onglet);
+      if (f) await this.sheets(':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ repeatCell: {
+        range: { sheetId: f.properties.sheetId, startRowIndex: Number(m[1]) - 1, endRowIndex: Number(m[2]), startColumnIndex: c.h, endColumnIndex: c.h + 1 },
+        cell: { userEnteredFormat: { numberFormat: { type: 'DATE_TIME', pattern: 'M/d/yyyy H:mm:ss' } } }, fields: 'userEnteredFormat.numberFormat' } }] }) });
+    }
+  }
+
+  // Champs texte du formulaire de clôture (copie fidèle de Cloture_form) ; pièces et signature : rapportMachine.
   champsCloture(req, pos) {
     const valeurs = {};
     const cop = (cle, col, max) => { if (req[cle] !== undefined && pos[col] !== undefined) valeurs[col] = nettoyer(req[cle], max); };
