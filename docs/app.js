@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.11';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.12';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -60,6 +60,11 @@
     inconnu: 'Technicien inconnu.',
     nom_invalide: 'Nom invalide (lettres, chiffres, espaces et tirets).',
     dernier_admin: 'Impossible : il doit rester un administrateur.',
+    email_manquant: 'Enregistre d’abord une adresse e-mail.',
+    compte_desactive: 'Ce compte est désactivé.',
+    mail_non_configure: 'L’envoi des mails n’est pas encore configuré.',
+    mail_echec: 'Le mail n’a pas pu partir. Réessaie dans un moment.',
+    mail_quota: 'Limite de mails du jour atteinte (100). Réessaie demain.',
     refuse: 'Action réservée à l’administrateur.',
     appareil_invalide: 'Appareil inconnu.',
     erreur_serveur: 'Erreur du serveur.',
@@ -844,7 +849,10 @@
           'placeholder="prenom@exemple.be" value="' + ech(u.email || '') + '"></div>' +
         '<div class="petits">' +
           '<button class="pr" data-act="admin_email" data-n="' + ech(u.nom) + '">Enregistrer l’e-mail</button>' +
+          (u.email && u.actif ? '<button class="pr" data-act="admin_inviter" data-n="' + ech(u.nom) + '">Envoyer l’invitation</button>' : '') +
         '</div>' +
+        (u.invite ? '<div style="font-size:.78rem;color:var(--doux);padding:0 4px">Invitation envoyée le ' +
+          ech(new Date(u.invite).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit' })) + '</div>' : '') +
         '<div class="petits">' +
           '<button class="pr" data-act="admin_reinitialiser" data-n="' + ech(u.nom) + '">Réinitialiser</button>' +
           (dernier ? '' :
@@ -893,6 +901,7 @@
       if (a) {
         const act = a.dataset.act, qui = a.dataset.n;
         if (act === 'admin_supprimer' && !confirm('Supprimer définitivement le compte ' + qui + ' ?')) return;
+        if (act === 'admin_inviter' && !confirm('Envoyer l’invitation par mail à ' + qui + ' ?')) return;
         if (act === 'admin_role' && a.dataset.r === 'admin' &&
             !confirm('Donner tous les droits d’administrateur à ' + qui + ' ?')) return;
         a.disabled = true;
@@ -903,8 +912,10 @@
         if (!res.ok) { vueTechniciens(dire(res.erreur), false); return; }
         let m = 'Compte ' + qui + ' mis à jour.';
         if (act === 'admin_email') m = res.email ? 'E-mail de ' + qui + ' enregistré.' : 'E-mail de ' + qui + ' effacé.';
+        else if (act === 'admin_inviter') m = 'Invitation envoyée à ' + res.email +
+          (res.motdepasse ? ', avec le mot de passe de départ.' : ' (sans mot de passe : il en a déjà choisi un).');
         else if (act === 'admin_role') m = qui + ' est maintenant ' + (res.role === 'admin' ? 'administrateur' : 'technicien') + '.';
-        else if (res.motdepasse) m = 'Mot de passe de ' + qui + ' remis à « ' + res.motdepasse + ' ». Il devra le changer.';
+        else if (res.motdepasse && act !== 'admin_inviter') m = 'Mot de passe de ' + qui + ' remis à « ' + res.motdepasse + ' ». Il devra le changer.';
         if (act !== 'admin_email') ouvert = '';
         vueTechniciens(m, true);
         return;
