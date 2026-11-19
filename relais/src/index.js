@@ -31,6 +31,7 @@ import {
 } from './calculs.js';
 
 const MDP_PROVISOIRE = '123456';
+const URL_APPLI = 'https://marc1768.github.io/pannes-techniciens/';   // lien envoyé dans l'invitation
 const MDP_MIN = 6;
 const ITERATIONS = 100000;
 const MAX_ECHECS = 5;
@@ -110,6 +111,8 @@ export class Relais extends DurableObject {
       if (u.provisoire) return { ok: false, erreur: 'changer_mdp' };        // imposé par le serveur
       if (req.action.indexOf('admin_') === 0) {
         if (u.role !== 'admin') return { ok: false, erreur: 'refuse' };
+        // L'envoi du mail peut prendre quelques secondes : hors verrou, il ne bloque pas les autres.
+        if (req.action === 'admin_inviter') return await this.inviter(u, req);
         return await this.avecVerrou(() => this.admin(u, req));
       }
       switch (req.action) {
@@ -256,13 +259,44 @@ export class Relais extends DurableObject {
     return { ok: true, jeton: await this.creerJeton(u, rester), utilisateur: this.publicUtil(u) };
   }
 
+  /* ---------- Invitation par mail (script Google Apps Script de Marc, MailApp) ---------- */
+
+  // Envoie au technicien le lien de l'appli, son nom de connexion et, s'il est encore le mot de passe
+  // de départ, ce mot de passe. Le relais ne connaît jamais un mot de passe choisi : il ne fait que vérifier
+  // si le compte a toujours « 123456 ».
+  async inviter(moi, req) {
+    const nom = normaliserNom(req.nom);
+    if (!nom) return { ok: false, erreur: 'nom_invalide' };
+    const cible = (await this.tousUtilisateurs()).find((u) => u.nom === nom);
+    if (!cible) return { ok: false, erreur: 'inconnu' };
+    if (!cible.actif) return { ok: false, erreur: 'compte_desactive' };
+    if (!cible.email) return { ok: false, erreur: 'email_manquant' };
+    if (!this.env.MAIL_URL || !this.env.MAIL_CLE) return { ok: false, erreur: 'mail_non_configure' };
+    const depart = cible.provisoire && (await this.mdpCorrect(cible, MDP_PROVISOIRE)) ? MDP_PROVISOIRE : '';
+    let r;
+    try {
+      const rep = await fetch(this.env.MAIL_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow',
+        body: JSON.stringify({ cle: this.env.MAIL_CLE, action: 'inviter', a: cible.email, nom,
+          role: cible.role, motdepasse: depart, lien: URL_APPLI, de: moi.nom }) });
+      const texte = await rep.text();
+      try { r = JSON.parse(texte); } catch (e) { return { ok: false, erreur: 'mail_echec' }; }
+    } catch (e) { return { ok: false, erreur: 'mail_echec' }; }
+    if (!r || !r.ok) return { ok: false, erreur: r && r.erreur === 'quota' ? 'mail_quota' : 'mail_echec' };
+    await this.avecVerrou(async () => {
+      const u = await this.ctx.storage.get('u_' + nom);
+      if (u) { u.invite = Date.now(); await this.ecrireUtilisateur(u); }
+    });
+    return { ok: true, nom, email: cible.email, motdepasse: depart, restant: r.restant };
+  }
+
   /* ---------- Module administrateur ---------- */
 
   async admin(moi, req) {
     const liste = await this.tousUtilisateurs();
     if (req.action === 'admin_liste') {
       return { ok: true, utilisateurs: liste.map((u) => ({ nom: u.nom, role: u.role, actif: u.actif, provisoire: !!u.provisoire,
-        email: u.email || '', dernier: u.dernier || 0 }))
+        email: u.email || '', dernier: u.dernier || 0, invite: u.invite || 0 }))
         .sort((a, b) => a.nom.localeCompare(b.nom)) };
     }
     const nom = normaliserNom(req.nom);
