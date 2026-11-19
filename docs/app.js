@@ -5,7 +5,7 @@
 (() => {
   'use strict';
 
-  const VERSION_APPLI = 'Version 1.12';   // affichee a la connexion et dans Mon compte
+  const VERSION_APPLI = 'Version 1.13';   // affichee a la connexion et dans Mon compte
   const URL_RELAIS = 'https://pannes-techniciens.marc-dongiovanni.workers.dev';
   const DELAI_MS = 20000;
   const RAFRAICHIR_MS = 60000;
@@ -61,6 +61,13 @@
     nom_invalide: 'Nom invalide (lettres, chiffres, espaces et tirets).',
     dernier_admin: 'Impossible : il doit rester un administrateur.',
     email_manquant: 'Enregistre d’abord une adresse e-mail.',
+    appareil_a_preciser: 'Désigne la machine avant de clôturer (pas INDETERMINE).',
+    signature_manquante: 'La signature du client est obligatoire.',
+    signature_invalide: 'Signature illisible : efface et fais signer à nouveau.',
+    signature_echec: 'La signature n’a pas pu être enregistrée. Réessaie.',
+    signature_non_configuree: 'L’enregistrement des signatures n’est pas configuré.',
+    piece_inconnue: 'Pièce inconnue : elle n’est plus dans le catalogue.',
+    quantite_invalide: 'Quantité invalide (1 à 99).',
     compte_desactive: 'Ce compte est désactivé.',
     mail_non_configure: 'L’envoi des mails n’est pas encore configuré.',
     mail_echec: 'Le mail n’a pas pu partir. Réessaie dans un moment.',
@@ -708,8 +715,30 @@
   }
 
   /* ---------- Écran : clôture ---------- */
+  // Un seul formulaire pour tous les types, comme Cloture_form d'AppSheet : nature et appareils recopiés
+  // de la création et modifiables ; pour une panne, un appareil INDETERMINE doit être désigné ;
+  // pour MACHINE A CAFE s'ajoutent pièces remplacées, type, numéro de série, commentaire, signataire et signature.
+  let catalogue = null;
+  let clo = null;
+
   function vueCloture(i, msg) {
-    const estCafe = i.type === 'MACHINE A CAFE';
+    if (!clo || clo.horodateur !== i.horodateur) {
+      clo = { horodateur: i.horodateur, nature: i.nature || '',
+        machines: i.type === 'PANNE' ? (i.appareil || '').split(',').map((x) => x.trim()).filter(Boolean) : [],
+        pieces: [], tm: '', ns: '', com: '', sig: '', signature: '' };
+    }
+    const estCafe = i.type === 'MACHINE A CAFE', estPanne = i.type === 'PANNE';
+    const indet = clo.machines.indexOf('INDETERMINE') >= 0;
+    const puce = (v) => {
+      const pris = clo.machines.indexOf(v) >= 0;
+      return '<button type="button" class="puce-m' + (pris ? ' prise' : '') + (v === 'INDETERMINE' ? ' indet' : '') + '" data-m="' + ech(v) + '">' + ech(v) + '</button>';
+    };
+    const lignePiece = (x, k) =>
+      '<div class="ligne-piece"><span style="flex:1;font-weight:600">' + ech(x.piece) + '</span>' +
+        '<button type="button" class="pas" data-moins="' + k + '" aria-label="Moins">−</button>' +
+        '<span style="min-width:2em;text-align:center;font-weight:800;font-size:1.05rem">' + x.quantite + '</span>' +
+        '<button type="button" class="pas" data-plus="' + k + '" aria-label="Plus">+</button>' +
+        '<button type="button" class="pas suppr" data-suppr="' + k + '" aria-label="Retirer">×</button></div>';
     app().innerHTML =
       '<div class="page">' +
         '<div class="barre-haut"><button class="btn-retour" id="b-ret" aria-label="Retour">' + FLECHE + '</button>' +
@@ -723,37 +752,124 @@
             '<span style="flex:1"><span style="display:block;font-size:.75rem;color:var(--doux)">Début de l’intervention</span>' +
             '<span style="display:block;font-size:1.05rem;font-weight:800">' + ech(i.debut ? i.debut.replace('T', ' à ') : 'non renseigné') + '</span></span></div>' +
           '<div class="bloc"><div class="champ"><label for="nat">Nature / travail effectué</label>' +
-            '<textarea id="nat" rows="4">' + ech(i.nature) + '</textarea></div></div>' +
+            '<textarea id="nat" rows="4">' + ech(clo.nature) + '</textarea></div></div>' +
+          (estPanne ?
+            '<div class="bloc" style="gap:10px"><div class="lib">Machines concernées</div>' +
+              (indet ? '<div class="msg msg-err" style="margin:0">Machine indéterminée : touche la ou les machines réellement en panne avant de clôturer.</div>' : '') +
+              '<div class="puces-m" id="pm">' + APPAREILS_JEU.filter((v) => v !== 'INDETERMINE' || indet).map(puce).join('') + '</div></div>' : '') +
           (estCafe ?
+            '<div class="bloc" style="gap:12px">' +
+              '<div class="lib">Pièces remplacées</div>' +
+              (clo.pieces.length ? clo.pieces.map(lignePiece).join('') : '<div style="font-size:.85rem;color:var(--doux)">Aucune pièce pour l’instant.</div>') +
+              '<div style="display:flex;gap:8px">' +
+                '<select id="np" style="flex:1;min-width:0;height:48px;border-radius:12px;border:1px solid var(--bord);background:var(--doux2);padding:0 10px;font-size:1rem">' +
+                  '<option value="">' + (catalogue ? 'Choisir une pièce…' : 'Chargement du catalogue…') + '</option>' +
+                  (catalogue || []).map((c) => '<option>' + ech(c) + '</option>').join('') + '</select>' +
+                '<button type="button" id="b-ap" class="pas" style="width:auto;padding:0 16px;font-size:.95rem;background:var(--accent);border-color:var(--accent);color:#fff">Ajouter</button>' +
+              '</div></div>' +
             '<div class="bloc" style="gap:14px">' +
               '<div class="lib">Rapport machine à café</div>' +
-              '<div class="champ"><label for="tm">Type de machine</label><input id="tm" type="text"></div>' +
-              '<div class="champ"><label for="ns">Numéro de série</label><input id="ns" type="text"></div>' +
-              '<div class="champ"><label for="com">Commentaire</label><textarea id="com" rows="3"></textarea></div>' +
-              '<div class="champ"><label for="sig">Nom du signataire</label><input id="sig" type="text"></div>' +
-              '<div style="font-size:.82rem;color:var(--doux);line-height:1.45">La signature du client et les pièces remplacées seront ajoutées dans une prochaine version.</div>' +
+              '<div class="champ"><label for="tm">Type de machine</label><input id="tm" type="text" value="' + ech(clo.tm) + '"></div>' +
+              '<div class="champ"><label for="ns">Numéro de série</label><input id="ns" type="text" value="' + ech(clo.ns) + '"></div>' +
+              '<div class="champ"><label for="com">Commentaire</label><textarea id="com" rows="3">' + ech(clo.com) + '</textarea></div>' +
+              '<div class="champ"><label for="sig">Nom du signataire</label><input id="sig" type="text" value="' + ech(clo.sig) + '"></div>' +
+              '<div class="champ"><label>Signature du client (obligatoire)</label>' +
+                '<canvas id="cv" class="zone-sig"></canvas>' +
+                '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                  '<span id="sig-etat" style="font-size:.8rem;color:var(--doux)">' + (clo.signature ? 'Signature enregistrée' : 'Faire signer du doigt dans le cadre') + '</span>' +
+                  '<button type="button" id="b-eff" class="btn-lien">Effacer</button></div></div>' +
             '</div>' : '') +
           '<button class="btn btn-prendre" type="submit" id="b-clo" style="margin-top:4px">Terminer l’intervention</button>' +
         '</form>' +
       '</div>';
-    $('b-ret').addEventListener('click', () => vueDetail(i));
+
+    // Garde ce qui est tapé avant de redessiner l'écran.
+    const garder = () => {
+      clo.nature = $('nat').value;
+      if (estCafe) { clo.tm = $('tm').value; clo.ns = $('ns').value; clo.com = $('com').value; clo.sig = $('sig').value; }
+    };
+    $('b-ret').addEventListener('click', () => { garder(); vueDetail(i); });
+
+    if (estPanne) $('pm').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-m]'); if (!b) return;
+      garder();
+      const v = b.dataset.m, k = clo.machines.indexOf(v);
+      if (k >= 0) clo.machines.splice(k, 1);
+      else { clo.machines.push(v); if (v !== 'INDETERMINE') clo.machines = clo.machines.filter((x) => x !== 'INDETERMINE'); }
+      vueCloture(i);
+    });
+
+    if (estCafe) {
+      if (!catalogue) appeler({ action: 'catalogue' }).then((r) => {
+        if (r.ok) { catalogue = r.pieces; if (document.getElementById('np')) { garder(); vueCloture(i, msg); } }
+      });
+      $('b-ap').addEventListener('click', () => {
+        const v = $('np').value; if (!v) return;
+        garder();
+        const x = clo.pieces.find((p) => p.piece === v);
+        if (x) x.quantite = Math.min(99, x.quantite + 1); else clo.pieces.push({ piece: v, quantite: 1 });
+        vueCloture(i);
+      });
+      document.querySelector('#f-clo').addEventListener('click', (ev) => {
+        const b = ev.target.closest('button[data-plus],button[data-moins],button[data-suppr]'); if (!b) return;
+        garder();
+        const k = Number(b.dataset.plus || b.dataset.moins || b.dataset.suppr);
+        if (b.dataset.plus !== undefined) clo.pieces[k].quantite = Math.min(99, clo.pieces[k].quantite + 1);
+        else if (b.dataset.moins !== undefined) { if (clo.pieces[k].quantite > 1) clo.pieces[k].quantite -= 1; }
+        else clo.pieces.splice(k, 1);
+        vueCloture(i);
+      });
+      preparerSignature();
+    }
+
     $('f-clo').addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      garder();
+      if (estPanne && !clo.machines.length) { vueCloture(i, 'Choisis au moins une machine.'); return; }
+      if (estPanne && clo.machines.indexOf('INDETERMINE') >= 0) { vueCloture(i, 'Désigne la machine avant de clôturer (pas INDETERMINE).'); return; }
+      if (estCafe && !clo.signature) { vueCloture(i, 'La signature du client est obligatoire.'); return; }
       const b = $('b-clo'); b.disabled = true; b.textContent = 'Enregistrement...';
-      const corps = { action: 'terminer', horodateur: i.horodateur, ligne: i.ligne, nature: $('nat').value };
+      const corps = { action: 'terminer', horodateur: i.horodateur, ligne: i.ligne, nature: clo.nature };
+      if (estPanne) corps.appareils = clo.machines;
       if (estCafe) {
-        corps.typeMachine = $('tm').value; corps.numeroSerie = $('ns').value;
-        corps.commentaire = $('com').value; corps.nomSignataire = $('sig').value;
+        corps.typeMachine = clo.tm; corps.numeroSerie = clo.ns; corps.commentaire = clo.com; corps.nomSignataire = clo.sig;
+        corps.pieces = clo.pieces; corps.signature = clo.signature;
       }
       const r = await appeler(corps);
       if (!r.ok) {
         if (r.erreur === 'session_invalide') { router(); return; }
         vueCloture(i, dire(r.erreur)); return;
       }
+      clo = null;
       await chargerListeSilencieuse();
       vueListe();
     });
   }
+
+  // Cadre de signature au doigt. L'image (PNG, fond blanc) est gardée dans clo.signature à chaque trait.
+  function preparerSignature() {
+    const cv = $('cv'); if (!cv) return;
+    const r = cv.getBoundingClientRect(), ech2 = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(r.width * ech2); cv.height = Math.round(r.height * ech2);
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+    g.lineWidth = 2.6 * ech2; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#1b1b1b';
+    if (clo.signature) { const im = new Image(); im.onload = () => g.drawImage(im, 0, 0, cv.width, cv.height); im.src = clo.signature; }
+    let trace = false, n = 0;
+    const pt = (ev) => { const b = cv.getBoundingClientRect(); return [(ev.clientX - b.left) * ech2, (ev.clientY - b.top) * ech2]; };
+    cv.addEventListener('pointerdown', (ev) => { ev.preventDefault(); cv.setPointerCapture(ev.pointerId); trace = true; n = 0; const [x, y] = pt(ev); g.beginPath(); g.moveTo(x, y); });
+    cv.addEventListener('pointermove', (ev) => { if (!trace) return; ev.preventDefault(); const [x, y] = pt(ev); g.lineTo(x, y); g.stroke(); n++; });
+    const fin = () => {
+      if (!trace) return; trace = false;
+      if (n > 2) { clo.signature = cv.toDataURL('image/png'); const e = $('sig-etat'); if (e) e.textContent = 'Signature enregistrée'; }
+    };
+    cv.addEventListener('pointerup', fin); cv.addEventListener('pointercancel', fin);
+    $('b-eff').addEventListener('click', () => {
+      g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); clo.signature = '';
+      const e = $('sig-etat'); if (e) e.textContent = 'Faire signer du doigt dans le cadre';
+    });
+  }
+
 
   /* ---------- Écran : mon compte ---------- */
   function vueCompte() {
